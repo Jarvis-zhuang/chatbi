@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "desc": "D3 评测集：30 条业务问句。evaluate 采用「执行结果比对」而非字符串比对 SQL——写 SQL 有无数种写法，跑出来的数据集一致才算对。",
+    "anchor_date": "2026-08-31",
+    "created": "2026-09-27",
+    "types": {
+      "sql": "期望可执行 SQL，比对结果集",
+      "glossary": "期望命中业务口径条目，比对 metric_name",
+      "refuse": "负样本，期望礼貌拒答而不是硬生成 SQL"
+    }
+  },
+  "cases": [
+    {"id": 1, "q": "各省份装机容量排名", "type": "sql",
+     "sql": "SELECT p.province AS province, ROUND(SUM(p.capacity_mw),2) AS cap FROM dim_plant p GROUP BY p.province ORDER BY cap DESC"},
+
+    {"id": 2, "q": "发电量最高的 10 个电站", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, SUM(f.generation_kwh) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id ORDER BY gen DESC, p.plant_name LIMIT 10"},
+
+    {"id": 3, "q": "本月等效利用小时排名前 5 的省份", "type": "sql",
+     "sql": "SELECT p.province AS province, ROUND(SUM(f.generation_kwh)/SUM(p.capacity_mw)/1000,2) AS eq FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.province ORDER BY eq DESC, p.province LIMIT 5",
+     "note": "本月 = 数据最大日期所在月"},
+
+    {"id": 4, "q": "逆变器转换效率最低的 5 个电站", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(p.inverter_efficiency,2) AS eff FROM dim_plant p ORDER BY ROUND(p.inverter_efficiency,2) ASC, p.plant_name LIMIT 5"},
+
+    {"id": 5, "q": "全国总装机容量是多少", "type": "sql",
+     "sql": "SELECT ROUND(SUM(capacity_mw),2) AS total_mw FROM dim_plant"},
+
+    {"id": 6, "q": "上个月总发电量是多少", "type": "sql",
+     "sql": "SELECT SUM(f.generation_kwh) AS gen FROM fact_daily_generation f WHERE strftime('%Y-%m', f.stat_date) = '2026-07'"},
+
+    {"id": 7, "q": "所有电站平均等效利用小时", "type": "sql",
+     "sql": "SELECT ROUND(SUM(f.generation_kwh)/SUM(p.capacity_mw)/1000,2) AS avg_eq_hours FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id"},
+
+    {"id": 8, "q": "平均弃光率是多少", "type": "sql",
+     "sql": "SELECT ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM fact_daily_generation f"},
+
+    {"id": 9, "q": "本月发电量较去年同期增长多少", "type": "sql",
+     "sql": "SELECT ROUND((cur-prev)/prev,4) AS yoy FROM (SELECT SUM(CASE WHEN strftime('%Y-%m',stat_date)='2026-08' THEN generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m',stat_date)='2025-08' THEN generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation)"},
+
+    {"id": 10, "q": "山东省本月发电量环比上月变化", "type": "sql",
+     "sql": "SELECT ROUND((cur-prev)/prev,4) AS mom FROM (SELECT SUM(CASE WHEN strftime('%Y-%m',f.stat_date)='2026-08' THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m',f.stat_date)='2026-07' THEN f.generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id WHERE p.province = '山东')"},
+
+    {"id": 11, "q": "今年前三季度发电量同比去年", "type": "sql",
+     "sql": "SELECT ROUND((cur-prev)/prev,4) AS yoy FROM (SELECT SUM(CASE WHEN strftime('%Y',stat_date)='2026' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 1 AND 9 THEN generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y',stat_date)='2025' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 1 AND 9 THEN generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation)"},
+
+    {"id": 12, "q": "Q2 发电量环比 Q1 变化多少", "type": "sql",
+     "sql": "SELECT ROUND((q2-q1)/q1,4) AS mom FROM (SELECT SUM(CASE WHEN strftime('%Y',stat_date)='2026' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 4 AND 6 THEN generation_kwh ELSE 0 END) AS q2, SUM(CASE WHEN strftime('%Y',stat_date)='2026' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 1 AND 3 THEN generation_kwh ELSE 0 END) AS q1 FROM fact_daily_generation)"},
+
+    {"id": 13, "q": "集中式与分布式装机容量各占多少", "type": "sql",
+     "sql": "SELECT station_type, ROUND(SUM(capacity_mw),2) AS cap_mw, ROUND(100.0*SUM(capacity_mw)/(SELECT SUM(capacity_mw) FROM dim_plant),2) AS pct FROM dim_plant GROUP BY station_type ORDER BY cap_mw DESC"},
+
+    {"id": 14, "q": "各省份装机占比分别是多少", "type": "sql",
+     "sql": "SELECT province, ROUND(SUM(capacity_mw),2) AS cap_mw, ROUND(100.0*SUM(capacity_mw)/(SELECT SUM(capacity_mw) FROM dim_plant),2) AS pct FROM dim_plant GROUP BY province ORDER BY cap_mw DESC"},
+
+    {"id": 15, "q": "西北大基地占全国装机比例是多少", "type": "sql",
+     "sql": "SELECT ROUND(100.0*SUM(CASE WHEN region='西北' AND station_type='集中式' THEN capacity_mw ELSE 0 END)/SUM(capacity_mw),2) AS pct FROM dim_plant"},
+
+    {"id": 16, "q": "上月发电量低于 100 万 kWh 的电站有哪些", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07' GROUP BY p.plant_id HAVING gen < 1000000 ORDER BY gen DESC LIMIT 200",
+     "note": "口径歧义样例：「发电量」未限定周期，理想行为是反问澄清（D4 提问五要素解决）"},
+
+    {"id": 17, "q": "近一年等效利用小时低于 1200 的电站", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh)/SUM(p.capacity_mw)/1000,1) AS eq_hours FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY p.plant_id HAVING eq_hours < 1200 ORDER BY eq_hours DESC LIMIT 200"},
+
+    {"id": 18, "q": "装机容量大于 200MW 的集中式电站", "type": "sql",
+     "sql": "SELECT plant_name, province, capacity_mw FROM dim_plant WHERE capacity_mw > 200 AND station_type = '集中式' ORDER BY capacity_mw DESC LIMIT 200"},
+
+    {"id": 19, "q": "弃光率超 5% 的电站有哪些", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id HAVING curt_rate > 0.05 ORDER BY curt_rate DESC LIMIT 200",
+     "note": "业务黑话样例：弃光率写成了「超 5%」而不是字段名"},
+
+    {"id": 20, "q": "过去 12 个月全国月度发电量趋势", "type": "sql",
+     "sql": "SELECT strftime('%Y-%m', stat_date) AS month, ROUND(SUM(generation_kwh),0) AS gen FROM fact_daily_generation WHERE stat_date >= date('2026-08-31', '-12 months') GROUP BY 1 ORDER BY 1"},
+
+    {"id": 21, "q": "近半年发电量最高的那个电站，按月的发电量变化", "type": "sql",
+     "sql": "SELECT strftime('%Y-%m', f.stat_date) AS month, ROUND(SUM(f.generation_kwh),0) AS gen FROM fact_daily_generation f WHERE f.stat_date >= date('2026-08-31', '-6 months') AND f.plant_id = (SELECT f2.plant_id FROM fact_daily_generation f2 WHERE f2.stat_date >= date('2026-08-31', '-6 months') GROUP BY f2.plant_id ORDER BY SUM(f2.generation_kwh) DESC LIMIT 1) GROUP BY 1 ORDER BY 1"},
+
+    {"id": 22, "q": "各季度发电量走势", "type": "sql",
+     "sql": "SELECT strftime('%Y', stat_date) || '-Q' || ((CAST(strftime('%m', stat_date) AS INTEGER)+2)/3) AS quarter, ROUND(SUM(generation_kwh),0) AS gen FROM fact_daily_generation GROUP BY 1 ORDER BY 1"},
+
+    {"id": 23, "q": "山东省下所有电站的发电量汇总", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, SUM(f.generation_kwh) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '山东' GROUP BY p.plant_id ORDER BY gen DESC LIMIT 200"},
+
+    {"id": 24, "q": "使用阳光电源逆变器的电站平均转换效率", "type": "sql",
+     "sql": "SELECT inverter_brand, ROUND(AVG(inverter_efficiency),4) AS avg_eff, COUNT(*) AS plant_cnt FROM dim_plant WHERE inverter_brand = '阳光电源' GROUP BY 1"},
+
+    {"id": 25, "q": "按设备类型统计各电站故障次数，取前 10", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, d.device_type AS device_type, COUNT(*) AS fault_cnt FROM fact_device_fault fl JOIN dim_device d ON d.device_id = fl.device_id JOIN dim_plant p ON p.plant_id = fl.plant_id GROUP BY 1, 2 ORDER BY fault_cnt DESC, p.plant_name, d.device_type LIMIT 10"},
+
+    {"id": 26, "q": "等效利用小时是怎么定义的", "type": "glossary", "metric": "等效利用小时"},
+
+    {"id": 27, "q": "弃光率的计算公式是什么", "type": "glossary", "metric": "弃光率"},
+
+    {"id": 28, "q": "单位装机发电量怎么算", "type": "glossary", "metric": "单位装机发电量"},
+
+    {"id": 29, "q": "你能查哪些指标", "type": "refuse",
+     "note": "负样本：期望礼貌拒答 + 重述能力范围，而不是硬生成一条 SQL"},
+
+    {"id": 30, "q": "你的知识库数据到什么时候更新的", "type": "refuse",
+     "note": "负样本：真实用户一半的问题在试探边界，守不住就会乱生成 SQL"},
+
+    {"id": 31, "q": "美国的转换效率情况怎么样", "type": "refuse",
+     "note": "负样本（2026-09-27 实测撞出的真 bug）：领域词会命中「逆变器转换效率」但地域实体不在库里，期望拒答而不是硬生成一条全国 SQL。考察护栏要做实体校验，不只拦无关问题"}
+  ]
+}

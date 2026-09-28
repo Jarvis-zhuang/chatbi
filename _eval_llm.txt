@@ -1,0 +1,76 @@
+mode: LLM | cases: 31
+------------------------------------------------------------------------
+[PASS] #01 各省份装机容量排名
+[FAIL] #02 发电量最高的 10 个电站
+       predict: SELECT p.plant_id, p.plant_name, SUM(f.generation_kwh) AS total_generation_kwh FROM fact_daily_generation f JOIN dim_plant p ON f.plant_id = p.plant_id GROUP BY p.plant_id, p.plant_name ORDER BY total_generation_kwh DESC
+       rows   : [[43, '沙丘农光互补电站-43', 1483514485.44], [15, '中环渔光互补电站-15', 1434423569.07], [47, '沙丘渔光互补电站-47', 950821909.77], [1, '中环光伏电站-01', 927006717.84], [17, '贺兰光伏电站-17', 89
+[FAIL] #03 本月等效利用小时排名前 5 的省份
+       predict: SELECT p.province,        SUM(f.generation_kwh) / SUM(p.capacity_mw) / 1000.0 AS equivalent_hours FROM fact_daily_generation f JOIN dim_plant p ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = strftime('
+       rows   : []
+[FAIL] #04 逆变器转换效率最低的 5 个电站
+       predict: SELECT plant_id, plant_name, inverter_efficiency FROM dim_plant ORDER BY inverter_efficiency ASC LIMIT 5
+       rows   : [[31, '河套光伏发电厂-31', 0.9552], [37, '河套渔光互补电站-37', 0.9565], [13, '金辰山地光伏电站-13', 0.9573], [46, '腾晖渔光互补电站-46', 0.9573], [60, '玉门渔光互补电站-60', 0.9585]]
+[PASS] #05 全国总装机容量是多少
+[FAIL] #06 上个月总发电量是多少
+       predict: SELECT SUM(generation_kwh) AS total_generation_kwh FROM fact_daily_generation WHERE strftime('%Y-%m', stat_date) = strftime('%Y-%m', 'now', '-1 month')
+       rows   : [[808993598.14]]
+[PASS] #07 所有电站平均等效利用小时
+[PASS] #08 平均弃光率是多少
+[FAIL] #09 本月发电量较去年同期增长多少
+       predict: SELECT   (SELECT SUM(generation_kwh) FROM fact_daily_generation WHERE strftime('%Y-%m', stat_date) = strftime('%Y-%m', 'now')) AS current_month,   (SELECT SUM(generation_kwh) FROM fact_daily_generation WHERE strftime('%Y
+       rows   : [[None, 744702801.8, None, None]]
+[FAIL] #10 山东省本月发电量环比上月变化
+       predict: SELECT   strftime('%Y-%m', f.stat_date) AS month,   SUM(f.generation_kwh) AS generation_kwh,   LAG(SUM(f.generation_kwh)) OVER (ORDER BY strftime('%Y-%m', f.stat_date)) AS prev_generation_kwh,   (SUM(f.generation_kwh) - 
+       rows   : [['2026-08', 18514871.77, None, None]]
+[FAIL] #11 今年前三季度发电量同比去年
+       predict: SELECT   strftime('%Y', stat_date) AS year,   SUM(generation_kwh) AS generation_kwh FROM fact_daily_generation WHERE CAST(strftime('%m', stat_date) AS INTEGER) BETWEEN 1 AND 9   AND strftime('%Y', stat_date) IN (strftime
+       rows   : [['2025', 6765034918.04], ['2026', 6018289640.43]]
+[FAIL] #12 Q2 发电量环比 Q1 变化多少
+       predict: SELECT   q1.q1_gen,   q2.q2_gen,   (q2.q2_gen - q1.q1_gen) AS diff_kwh,   CASE WHEN q1.q1_gen = 0 THEN NULL        ELSE (q2.q2_gen - q1.q1_gen) * 1.0 / q1.q1_gen END AS mom_rate FROM   (SELECT SUM(generation_kwh) AS q1_g
+       rows   : [[None, None, None, None]]
+[FAIL] #13 集中式与分布式装机容量各占多少
+       predict: SELECT station_type, SUM(capacity_mw) AS total_capacity_mw FROM dim_plant WHERE station_type IN ('集中式', '分布式') GROUP BY station_type
+       rows   : [['分布式', 1153.3], ['集中式', 4636.0]]
+[FAIL] #14 各省份装机占比分别是多少
+       predict: SELECT province,        SUM(capacity_mw) AS capacity_mw,        ROUND(SUM(capacity_mw) * 1.0 / (SELECT SUM(capacity_mw) FROM dim_plant), 4) AS capacity_ratio FROM dim_plant GROUP BY province ORDER BY capacity_mw DESC
+       rows   : [['青海', 1436.5, 0.2481], ['甘肃', 1024.4, 0.1769], ['内蒙古', 720.3, 0.1244], ['宁夏', 575.2, 0.0994], ['新疆', 539.3, 0.0932], ['山西', 388.2, 0.0671], ['河北', 237.1, 0.04
+[PASS] #15 西北大基地占全国装机比例是多少
+[FAIL] #16 上月发电量低于 100 万 kWh 的电站有哪些
+       predict: SELECT p.plant_id, p.plant_name, SUM(g.generation_kwh) AS total_generation_kwh FROM fact_daily_generation g JOIN dim_plant p ON g.plant_id = p.plant_id WHERE strftime('%Y-%m', g.stat_date) = strftime('%Y-%m', 'now', '-1 
+       rows   : [[32, '贺兰农光互补电站-32', 982388.67], [39, '淮上光伏电站-39', 836638.82], [53, '广宇光伏发电厂-53', 557382.51]]
+[FAIL] #17 近一年等效利用小时低于 1200 的电站
+       predict: SELECT p.plant_id, p.plant_name, SUM(g.generation_kwh) / SUM(p.capacity_mw) / 1000.0 AS equivalent_hours FROM fact_daily_generation g JOIN dim_plant p ON g.plant_id = p.plant_id WHERE g.stat_date >= date('now', '-1 year'
+       rows   : [[1, '中环光伏电站-01', 4.763575911090308], [2, '沙丘光伏电站-02', 4.301115815021237], [3, '天合农光互补电站-03', 3.9365773538952307], [4, '东旭光伏发电厂-04', 3.991258532689585], [5, '瀚海
+[FAIL] #18 装机容量大于 200MW 的集中式电站
+       predict: SELECT plant_id, plant_name, province, region, station_type, capacity_mw, inverter_brand, inverter_efficiency, grid_connect_date FROM dim_plant WHERE station_type = '集中式' AND capacity_mw > 200
+       rows   : [[1, '中环光伏电站-01', '青海', '西北', '集中式', 264.2, '阳光电源', 0.9833, '2021-10-07'], [2, '沙丘光伏电站-02', '新疆', '西北', '集中式', 241.0, '锦浪科技', 0.9695, '2023-11-26'], [3, '天合农光互补
+[FAIL] #19 弃光率超 5% 的电站有哪些
+       predict: SELECT p.plant_id, p.plant_name FROM fact_daily_generation g JOIN dim_plant p ON p.plant_id = g.plant_id GROUP BY p.plant_id, p.plant_name HAVING SUM(g.curtailment_kwh) * 1.0 / (SUM(g.generation_kwh) + SUM(g.curtailment_
+       rows   : [[2, '沙丘光伏电站-02'], [4, '东旭光伏发电厂-04'], [15, '中环渔光互补电站-15'], [16, '沙丘山地光伏电站-16'], [17, '贺兰光伏电站-17'], [18, '瑞泰光伏发电厂-18'], [30, '玉门山地光伏电站-30'], [31, '河套光伏发电厂-31'], 
+[FAIL] #20 过去 12 个月全国月度发电量趋势
+       predict: SELECT strftime('%Y-%m', stat_date) AS month, SUM(generation_kwh) AS total_generation_kwh FROM fact_daily_generation WHERE stat_date >= date('now', '-12 months') GROUP BY strftime('%Y-%m', stat_date) ORDER BY month
+       rows   : [['2025-09', 72924010.64], ['2025-10', 704577995.55], ['2025-11', 567728139.23], ['2025-12', 513730781.15], ['2026-01', 530886308.99], ['2026-02', 543319711.3],
+[FAIL] #21 近半年发电量最高的那个电站，按月的发电量变化
+       predict: WITH recent AS (   SELECT MAX(stat_date) AS max_date FROM fact_daily_generation ), top_plant AS (   SELECT plant_id   FROM fact_daily_generation, recent   WHERE stat_date >= date(recent.max_date, '-6 months')   GROUP BY 
+       rows   : [['2024-09', 67056013.34], ['2024-10', 60288814.57], ['2024-11', 47961097.69], ['2024-12', 45711805.25], ['2025-01', 47415829.36], ['2025-02', 48773752.14], ['2
+[FAIL] #22 各季度发电量走势
+       predict: SELECT strftime('%Y', stat_date) || '-Q' || ((CAST(strftime('%m', stat_date) AS INTEGER) - 1) / 3 + 1) AS quarter,        SUM(generation_kwh) AS total_generation_kwh FROM fact_daily_generation GROUP BY quarter ORDER BY q
+       rows   : [['2024-Q3', 746816912.44], ['2024-Q4', 1782691614.34], ['2025-Q1', 1830880163.21], ['2025-Q2', 2552990389.12], ['2025-Q3', 2381164365.71], ['2025-Q4', 17860369
+[FAIL] #23 山东省下所有电站的发电量汇总
+       predict: SELECT SUM(f.generation_kwh) AS total_generation_kwh FROM fact_daily_generation f JOIN dim_plant p ON f.plant_id = p.plant_id WHERE p.province = '山东'
+       rows   : [[391171264.5]]
+[FAIL] #24 使用阳光电源逆变器的电站平均转换效率
+       predict: SELECT AVG(inverter_efficiency) AS avg_inverter_efficiency FROM dim_plant WHERE inverter_brand = '阳光电源'
+       rows   : [[0.9687571428571429]]
+[FAIL] #25 按设备类型统计各电站故障次数，取前 10
+       predict: SELECT d.device_type, COUNT(*) AS fault_count FROM fact_device_fault f JOIN dim_device d ON f.device_id = d.device_id GROUP BY d.device_type ORDER BY fault_count DESC LIMIT 10
+       rows   : [['支架跟踪系统', 308], ['变压器', 296], ['汇流箱', 276], ['气象仪', 238], ['逆变器', 234]]
+[PASS] #26 等效利用小时是怎么定义的
+[PASS] #27 弃光率的计算公式是什么
+[PASS] #28 单位装机发电量怎么算
+[PASS] #29 你能查哪些指标
+[PASS] #30 你的知识库数据到什么时候更新的
+[PASS] #31 美国的转换效率情况怎么样
+------------------------------------------------------------------------
+准确率：11/31 = 35.5%
+错题 id： 2, 3, 4, 6, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25

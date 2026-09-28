@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ChatBI 智能问数 · 光伏电站场景</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --line: #e5e7eb; --text: #1f2328;
+    --muted: #6b7280; --brand: #2563eb; --ok: #16a34a; --warn: #d97706; --err: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--line);
+           display: flex; align-items: baseline; gap: 12px; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .mode { font-size: 12px; color: var(--muted);
+                 border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px; }
+  .ask { display: flex; gap: 8px; margin-bottom: 16px; }
+  .ask input { flex: 1; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px;
+               font-size: 14px; background: var(--card); }
+  .ask button { padding: 10px 20px; border: 0; border-radius: 8px; background: var(--brand);
+                color: #fff; cursor: pointer; font-size: 14px; }
+  .ask button:disabled { opacity: .5; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .chips span { font-size: 12px; color: var(--muted); padding: 4px 10px; background: var(--card);
+                border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+  .chips span:hover { color: var(--brand); border-color: var(--brand); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px; margin-bottom: 14px; }
+  .step-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+  .dot.active { background: var(--brand); }
+  .dot.done { background: var(--ok); }
+  .dot.fail { background: var(--err); }
+  .step-title { font-weight: 600; min-width: 92px; }
+  .step-text { color: var(--muted); word-break: break-all; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow: auto;
+        font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; }
+  th { background: #fafafa; position: sticky; top: 0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .refuse { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 12px;
+            border-radius: 8px; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .chart { display: flex; align-items: flex-end; gap: 4px; height: 180px; padding-top: 8px; }
+  .chart div { flex: 1; background: linear-gradient(180deg, #60a5fa, #2563eb); border-radius: 3px 3px 0 0;
+               position: relative; min-width: 2px; }
+  .chart div span { position: absolute; top: -18px; left: 0; right: 0; text-align: center;
+                    font-size: 10px; color: var(--muted); }
+  .chart-labels { display: flex; gap: 4px; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .chart-labels i { flex: 1; text-align: center; font-style: normal; overflow: hidden;
+                    text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ChatBI 智能问数</h1>
+  <span class="mode" id="mode">加载中…</span>
+</header>
+<main>
+  <div class="ask">
+    <input id="q" placeholder="试试：各省份装机容量排名 / 弃光率高于 5% 的电站" />
+    <button id="go">提问</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div id="out"></div>
+</main>
+
+<script>
+const STEPS = ['① 选表', '② 口径检索', '③ 生成 SQL', '④ 执行 + 图表'];
+const DEMO = [
+  '各省份装机容量排名', '发电量最高的 10 个电站', '上个月总发电量',
+  '弃光率高于 5% 的电站', '过去 12 个月全国月度发电量趋势',
+  '使用阳光电源逆变器的电站平均转换效率', '等效利用小时是怎么定义的', '你能查哪些指标'
+];
+const $q = document.getElementById('q');
+const $out = document.getElementById('out');
+const $go = document.getElementById('go');
+
+fetch('/api/meta').then(r => r.json()).then(m => {
+  document.getElementById('mode').textContent =
+    m.mode === 'MOCK' ? 'MOCK 模式（免 API Key，链路照跑）' : 'LLM 模式 · ' + m.model;
+}).catch(() => {});
+
+const chips = document.getElementById('chips');
+DEMO.forEach(t => {
+  const s = document.createElement('span');
+  s.textContent = t;
+  s.onclick = () => { $q.value = t; ask(t); };
+  chips.appendChild(s);
+});
+
+function fmt(n) {
+  if (typeof n !== 'number') return n;
+  return Math.abs(n) >= 10000 ? n.toLocaleString('zh-CN', { maximumFractionDigits: 0 }) : String(n);
+}
+
+function renderChart(columns, rows) {
+  if (!rows || rows.length < 2 || rows.length > 24) return '';
+  const numIdx = columns.map((c, i) => typeof rows[0][i] === 'number' ? i : -1).filter(i => i >= 0);
+  if (!numIdx.length) return '';
+  const vi = numIdx[numIdx.length - 1];
+  const vals = rows.map(r => Number(r[vi]) || 0);
+  const max = Math.max(...vals), min = Math.min(...vals);
+  const span = (max - min) || 1;
+  const bars = rows.map((r, i) => {
+    const h = 8 + (Number(r[vi]) - min) / span * 92;
+    return `<div style="height:${h}%"><span>${fmt(Number(r[vi]))}</span></div>`;
+  }).join('');
+  const labels = rows.map(r => `<i>${fmt(r[0])}</i>`).join('');
+  return `<div class="card"><div class="hint">按${columns[vi]}绘制 · ${rows.length} 个分组</div>
+          <div class="chart">${bars}</div><div class="chart-labels">${labels}</div></div>`;
+}
+
+function newSession(question) {
+  $out.innerHTML = `
+    <div class="card"><div class="hint">问题</div><div><b>${question}</b></div></div>
+    <div class="card" id="pipe">${STEPS.map((s, i) => `
+      <div class="step-row"><span class="dot" data-i="${i}"></span>
+      <span class="step-title">${s}</span><span class="step-text" data-t="${i}">等待中</span></div>`).join('')}
+    </div>`;
+  return {
+    setStep(i, text, cls) {
+      const t = document.querySelector(`[data-t="${i}"]`);
+      const d = document.querySelector(`.dot[data-i="${i}"]`);
+      if (t) t.textContent = text;
+      if (d) { d.className = 'dot ' + (cls || 'active'); }
+    },
+    add(html) { const c = document.createElement('div'); c.innerHTML = html; $out.appendChild(c); }
+  };
+}
+
+function ask(question) {
+  const ui = newSession(question);
+  $go.disabled = true;
+  fetch('/api/ask', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question })
+  }).then(async res => {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6);
+        if (raw === '[DONE]') continue;
+        let ev; try { ev = JSON.parse(raw); } catch (e) { continue; }
+        handle(ev, ui);
+      }
+    }
+    $go.disabled = false;
+  }).catch(err => {
+    ui.add(`<div class="card"><span style="color:var(--err)">请求失败：${err}</span></div>`);
+    $go.disabled = false;
+  });
+}
+
+function handle(ev, ui) {
+  switch (ev.event) {
+    case 'step':
+      ui.setStep(ev.step - 1, ev.text, 'done');
+      break;
+    case 'text':
+      ui.setStep(ev.step - 1, ev.text, 'active');
+      break;
+    case 'sql':
+      ui.setStep(2, ev.title || 'SQL 已生成，执行中', 'done');
+      ui.add(`<div class="card">${ev.title ? `<div class="hint">${ev.title}</div>` : ''}<pre>${ev.text}</pre></div>`);
+      break;
+    case 'glossary':
+      ui.setStep(2, '命中口径定义', 'done');
+      ui.add(`<div class="card"><div class="hint">业务口径（RAG 检索命中，走的是口径答案而非 SQL）</div>
+              <div>${ev.text.replace(/\n/g, '<br/>')}</div></div>`);
+      break;
+    case 'refuse':
+      ui.setStep(0, '未进入链路（护栏直接拦下）', 'fail');
+      ui.add(`<div class="refuse"><b>${ev.title}</b><br/>${ev.text}</div>`);
+      break;
+    case 'retry':
+      ui.setStep(ev.step - 1, ev.text, 'fail');
+      ui.add(`<div class="card"><span style="color:var(--warn)">${ev.title}</span>
+              <pre>${ev.text}</pre></div>`);
+      break;
+    case 'result': {
+      ui.setStep(ev.step - 1, ev.text, 'done');
+      const head = ev.columns.map(c => `<th>${c}</th>`).join('');
+      const body = ev.rows.map(r => '<tr>' + r.map(v =>
+        `<td class="${typeof v === 'number' ? 'num' : ''}">${fmt(v)}</td>`).join('') + '</tr>').join('');
+      ui.add(renderChart(ev.columns, ev.rows) || '');
+      ui.add(`<div class="card"><div class="hint">查询结果 · ${ev.rows.length} 行 · 重试 ${ev.attempts} 次</div>
+              <div style="max-height:360px;overflow:auto"><table><thead><tr>${head}</tr></thead>
+              <tbody>${body}</tbody></table></div></div>`);
+      break;
+    }
+    case 'error':
+      ui.setStep(3, ev.title || '失败', 'fail');
+      ui.add(`<div class="card"><span style="color:var(--err)">${ev.title || '错误'}：${ev.text}</span></div>`);
+      break;
+  }
+}
+
+$go.onclick = () => { const v = $q.value.trim(); if (v) ask(v); };
+$q.addEventListener('keydown', e => { if (e.key === 'Enter') $go.click(); });
+</script>
+</body>
+</html>
