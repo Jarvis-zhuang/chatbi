@@ -5,3 +5,7 @@ __pycache__/
 data/*.db
 data/*.sqlite3
 _out.txt
+
+# local scratch / agent workspace
+.workbuddy/
+_tmp_*

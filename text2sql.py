@@ -113,6 +113,183 @@ REFUSE_TEMPLATE = (
     "可以试试：各省份装机容量排名 / 上个月总发电量 / 弃光率高于 5% 的电站 / 等效利用小时是怎么定义的。"
 )
 
+# ---------------------------------------------------------------- 写操作护栏（D2 新增）
+# 实证来源：held-out 集 H06「帮我清空 上能 逆变器品牌的故障数」被模型悄悄翻译成
+#   SELECT COUNT(*) ...，"清空"意图丢失、护栏不拦（DENY_WORDS 只在 SQL 生成后拦英文关键字），
+#   用户会误以为操作成功了 —— 这叫**静默降级**，比直接报错危险得多。
+# 分两层，各管一件事：
+#   STRICT：明确写动词 → 命中即拒答，根本不生成 SQL。
+#   SOFT  ：模糊/间接表达（"新增装机容量"是合法指标，不能误杀）→ 不拒答，但结果强制带只读声明。
+#   第 3 层物理保险：数据库连接本身 mode=ro（db.py），就算前两层全漏，也写不进去。
+# 面试要点：为什么不用 LLM 判意图？护栏要可解释、可回归测试、零延迟、零成本；
+#           LLM 判意图是概率性的，漏拦时你连为什么漏的都说不清。
+REFUSE_WRITE_TEMPLATE = (
+    "这是数据修改操作（清空 / 删除 / 修改 / 写入等），我只提供只读查询，无法执行、也不会执行这类操作。"
+)
+
+# 明确写动词：命中即拒答
+WRITE_VERBS_STRICT = (
+    "清空", "清除", "清理", "清掉", "清了", "清空掉",
+    "删除", "删掉", "删了", "删去", "抹掉", "去掉", "移除", "干掉", "扔掉",
+    "修改", "改一下", "改一改", "改成", "改为", "改写", "改掉",
+    "更新", "重置", "重建", "初始化", "还原",
+    "插入", "写入", "回写", "导入", "灌入", "导入到",
+    "设成", "设为", "设置为", "调整成", "保存", "提交", "覆盖掉", "覆盖为",
+    "清零", "归零", "作废", "不要了", "砍掉", "消掉", "擦掉", "撤掉",
+)
+
+# 歧义消解：中文里「更新/同步」既是写动词也是查询词。
+# 「数据什么时候更新的」是查元数据，不是写操作 —— 不摘掉就会误杀合法查询。
+# 实证：eval_set #30「你的知识库数据到什么时候更新的」曾被错判成写操作。
+WRITE_AMBIGUOUS_SKIP = (
+    r"(?:什么时候|何时|哪天|哪一天|几号)[^。？?]{0,4}更新",
+    r"更新(?:到|至)(?:什么|哪|什么时候|哪天|几月|几号)",
+    r"更新时间", r"最新更新", r"更新了吗", r"更新过吗", r"更新频率",
+    r"数据[^。？?]{0,4}更新", r"同步(?:了吗|过吗|状态|情况)",
+)
+
+# 模糊表达：不拒答（可能是合法指标，如「新增装机容量」），但结果里强制带只读声明
+WRITE_VERBS_SOFT = (
+    "新增", "添加", "加入", "加一条", "建一个",
+    "覆盖", "同步", "刷新", "维护", "修复", "变更", "调整",
+    "处理一下", "弄一下", "动一下", "操作一下", "帮我搞", "帮我弄",
+)
+
+READONLY_NOTICE = "本次为只读查询，未执行任何写操作。"
+
+
+def is_write_intent(question: str) -> bool:
+    """L1 护栏：写操作意图识别。命中 → 拒答，不进 SQL 生成链路。
+
+    为什么放在最前面（早于选表/检索/生成）：一旦让模型先翻译，
+    "清空"可能被降级成 SELECT COUNT(*)，意图就不可逆地丢了。
+
+    已知上限（不掩饰）：这是穷举式词表，中文说法补不完。
+    "上能的故障数不要了"能拦，"上能的故障数你看着办"拦不住 ——
+    所以下面还有 L2 只读声明 和 db.py 的 mode=ro 物理保险，三层各管各的。
+    """
+    q = question or ""
+    probe = q
+    for pat in WRITE_AMBIGUOUS_SKIP:
+        probe = re.sub(pat, "", probe)
+    return any(v in probe for v in WRITE_VERBS_STRICT)
+
+
+def has_soft_write_hint(question: str) -> bool:
+    """L2 兜底：模糊写意图。不拒答，但回答里必须显式声明「没写任何东西」，
+    这样即使 L1 漏报（比如用户说「清理一下」而词表里只有「清理」之外的说法），
+    静默降级也会变成**明确降级**——用户不会误以为操作成功了。"""
+    q = question or ""
+    return any(v in q for v in WRITE_VERBS_SOFT)
+
+
+# ============================================================ 第 5.5 站：自检反馈循环（D2 任务 3）
+# 为什么需要：现有的自修正只在 SQL **执行报错**时触发。但有一类错是**语法完全正确、执行也成功**，
+#   只是结果不对劲——评测集 #21 就是这么漏的：CTE 选出 top 电站后，外层主查询漏了时间窗 WHERE，
+#   返了 730 天的 24 个月（期望近半年 6 个月）。执行不报错，所以循环压根没触发。
+# 难点：不能"见空就重试"——有的空结果是对的（库里本来就没有海南的电站），
+#   见空就重试 = 拿 token 打水漂，还可能越改越错。
+# 解法（他拍板 C）：**先探针，再重试** —— 探针负责区分「查错了」和「本来就没有」，
+#   只有前者才值得重试。这也正是面试官会追问的那句："空结果你会不会也重试一遍？"
+
+SELFCHECK_MAX = 1        # 自检重试硬上限（与 MAX_RETRY 分开算），防把一次提问变成死循环
+SCAN_ROWS = 200          # 可疑检测最多扫这么多行，别为了自检把查询拖慢
+
+# 值域红线：命中列名关键词的数值必须落在区间内
+VALUE_RANGE_HINTS = (
+    ("小时", 0, 8760),     # 一年最多 8760 小时
+    ("效率", 0, 1),        # 契约：效率 / 率用小数
+    ("率", 0, 1),
+    ("占比", 0, 100),      # 契约：占比 / 比例用百分比
+    ("比例", 0, 100),
+)
+
+MONTH_RE = re.compile(r"^\d{4}-(?:0[1-9]|1[0-2])$")
+
+
+def _expect_months(question: str):
+    """问题里说了「近 N 个月 / 半年 / 一年」→ 期望月份数；没说返回 None"""
+    m = re.search(r"近\s*(\d+)\s*个月", question)
+    if m:
+        return int(m.group(1))
+    if re.search(r"(?:近|过去)\s*半年", question):
+        return 6
+    if re.search(r"(?:近|过去)\s*(?:一年|12\s*个月)", question):
+        return 12
+    m = re.search(r"近\s*(\d+)\s*年", question)
+    if m:
+        return int(m.group(1)) * 12
+    return None
+
+
+def looks_suspicious(question: str, columns, rows) -> tuple[bool, str]:
+    """可疑结果检测：语法没错、执行成功，但结果"不对劲"。返回 (是否可疑, 原因)。"""
+    if rows is None:
+        return False, ""
+    if len(rows) == 0:
+        return True, "结果集为空"
+    if len(rows) == 1 and all(v is None for v in rows[0]):
+        return True, "只有一行且所有值都是 NULL（典型的 LEFT JOIN 退化成 INNER JOIN）"
+
+    cols = [str(c).lower() for c in (columns or [])]
+    for r in rows[:SCAN_ROWS]:
+        for c, v in zip(cols, r):
+            if not isinstance(v, (int, float)):
+                continue
+            for kw, lo, hi in VALUE_RANGE_HINTS:
+                if kw in c and not (lo <= v <= hi):
+                    return True, f"列「{c}」的值 {v} 超出合理区间 [{lo}, {hi}]"
+
+    # 时间跨度对不上（#21 的抓手）：问"近半年"却返回 24 个月
+    want = _expect_months(question or "")
+    if want:
+        months = {v for r in rows[:SCAN_ROWS] for v in r
+                  if isinstance(v, str) and MONTH_RE.match(v)}
+        if len(months) > want + 1:
+            return True, (f"问题只问近 {want} 个月，结果却返回了 {len(months)} 个月"
+                          "（时间窗很可能没作用到外层主查询）")
+    return False, ""
+
+
+def probe_has_data(question: str) -> tuple[bool, str]:
+    """值域探针：这个查询「本来就该没数据」吗？
+
+    返回 (是否本来就没有, 说明)。
+      True  = 库里确实没这个东西 → 空结果是对的，**不重试**（省 token，也避免越改越错）
+      False = 库里有、却没查出来 → **是 SQL 写错了**，值得重试
+    没有可识别实体时（如"全国总发电量"）默认 False，宁可多探一次也不放过真错。
+    """
+    q = question or ""
+    # 探针 1：地域实体。问"海南省的发电量"而库里没有海南 → 空结果合理
+    m = re.search(r"([一-龥]{2,7})(?:省|市)", q)
+    if m:
+        name = m.group(1)
+        try:
+            _, rows, _ = execute_sql(f"SELECT COUNT(*) FROM dim_plant WHERE province = '{name}'")
+            cnt = rows[0][0] if rows else 0
+        except Exception:  # noqa: BLE001
+            cnt = -1
+        if cnt == 0:
+            return True, f"库里没有「{name}」的电站，空结果是合理的"
+    # 探针 2：时间超出数据范围。问 2027 年而数据只到 2026-08 → 空结果合理
+    y = re.search(r"(20\d{2})\s*年", q)
+    if y:
+        try:
+            anchor = get_anchor_date() or ""
+            if anchor and int(y.group(1)) > int(anchor[:4]):
+                return True, f"问题问的是 {y.group(1)} 年，数据只到 {anchor}，空结果是合理的"
+        except Exception:  # noqa: BLE001
+            pass
+    return False, ""
+
+
+def selfcheck_hint(reason: str) -> str:
+    """把「为什么可疑」翻译成模型能用的修正指令——不是笼统说一句『你写错了』"""
+    return (f"上次生成的结果可疑：{reason}。请逐项检查："
+            "① WHERE 条件是否作用到了外层主查询（CTE 里的条件不会自动传递到外层）；"
+            "② 分组粒度是否与问题的维度一致；"
+            "③ 时间窗是否漏写或用错了基准日期。")
+
 # ============================================================ 第 1 站：选表（RAG）
 def select_tables(question: str, top_k: int = 3) -> list[str]:
     """
@@ -654,11 +831,17 @@ def ask_stream(question: str) -> Iterator[dict]:
         yield {"event": "error", "step": 0, "text": "请输入问题"}
         return
 
-    # 负样本护栏（两道门）放在最前面：元问题 / 域外问题根本不进链路，不选表也不检索
+    # 护栏（三道门）放在最前面：写操作 / 元问题 / 域外问题根本不进链路，不选表也不检索
+    if is_write_intent(q):
+        # 决策 3A：拒答就拒答，不给替代查询——给了替代查询等于暗示"这个需求可以换个说法实现"
+        yield {"event": "refuse", "step": 0, "title": "写操作不支持", "text": REFUSE_WRITE_TEMPLATE}
+        return
     if is_meta_question(q) or is_out_of_scope(q):
         # D4 提问五要素的拒答话术：说明做不到的原因 + 给替代路径
         yield {"event": "refuse", "step": 0, "title": "超出能力范围", "text": REFUSE_TEMPLATE}
         return
+    # L2 兜底：模糊写意图不拒答，但结果里强制带只读声明，防止"静默降级"
+    soft_notice = READONLY_NOTICE if has_soft_write_hint(q) else None
 
     # step 1 选表
     tables = select_tables(q)
@@ -673,10 +856,11 @@ def ask_stream(question: str) -> Iterator[dict]:
     else:
         yield {"event": "step", "step": 2, "title": "口径检索", "text": "未命中，按表结构推断"}
 
-    # step 3 生成 SQL（含自修正循环）
+    # step 3 生成 SQL（含自修正循环 + 自检反馈循环）
     error_hint = ""
     sql = ""
-    for attempt in range(MAX_RETRY + 1):
+    selfcheck_used = 0
+    for attempt in range(MAX_RETRY + 1 + SELFCHECK_MAX):
         if USE_LLM:
             sql = llm_generate_sql(q, tables, metrics, error_hint)
         else:
@@ -691,10 +875,29 @@ def ask_stream(question: str) -> Iterator[dict]:
         # step 4 执行
         result = run_sql(sql)
         if result["ok"]:
+            # step 4.5 自检：执行成功 ≠ 结果对。可疑 → 先探针，再决定要不要重试
+            sus, reason = looks_suspicious(q, result["columns"], result["rows"])
+            if sus and selfcheck_used < SELFCHECK_MAX:
+                no_data, why = probe_has_data(q)
+                if no_data:
+                    yield {"event": "selfcheck", "step": 4,
+                           "title": "自检：正常，未重试", "text": f"探针判定「本来就没有」：{why}"}
+                    yield {"event": "result", "step": 4, "title": "执行完成",
+                           "text": f"返回 {len(result['rows'])} 行，耗时 {result['elapsed_ms']} ms",
+                           "columns": result["columns"], "rows": result["rows"],
+                           "attempts": attempt + 1, "sql": sql,
+                           "readonly_notice": soft_notice}
+                    return
+                selfcheck_used += 1
+                yield {"event": "selfcheck", "step": 4, "title": f"结果可疑，第 {selfcheck_used} 次自检重试",
+                       "text": f"{reason}（探针确认库里有数据，判定为查错而非本来就没有）"}
+                error_hint = selfcheck_hint(reason)
+                continue
             yield {"event": "result", "step": 4, "title": "执行完成",
                    "text": f"返回 {len(result['rows'])} 行，耗时 {result['elapsed_ms']} ms",
                    "columns": result["columns"], "rows": result["rows"],
-                   "attempts": attempt + 1, "sql": sql}
+                   "attempts": attempt + 1, "sql": sql,
+                   "readonly_notice": soft_notice}
             return
         # 考点 2：生成错了怎么办 → 把原始报错喂回模型重生成，MAX_RETRY 是硬上限
         error_hint = result["error"]
@@ -707,9 +910,13 @@ def ask_stream(question: str) -> Iterator[dict]:
 def ask(question: str) -> dict:
     """非流式版本，给 eval.py 用"""
     out = {"question": question, "sql": None, "ok": False, "refused": False, "attempts": 0,
-           "error": None, "columns": None, "rows": None, "answer": None}
+           "error": None, "columns": None, "rows": None, "answer": None, "readonly_notice": None,
+           "selfcheck": None}
 
     # 护栏：负样本拒答优先于任何 SQL 生成（流式、非流式两条都用同一套判定）
+    if is_write_intent(question):
+        out.update(ok=True, refused=True, answer=REFUSE_WRITE_TEMPLATE)
+        return out
     if is_meta_question(question) or is_out_of_scope(question):
         out.update(ok=True, refused=True, answer=REFUSE_TEMPLATE)
         return out
@@ -719,14 +926,31 @@ def ask(question: str) -> dict:
         out.update(ok=True, answer=metrics[0]["definition"])
         return out
     error_hint = ""
-    for attempt in range(MAX_RETRY + 1):
+    selfcheck_used = 0
+    # 预算：执行报错重试 MAX_RETRY 次 + 自检重试最多 SELFCHECK_MAX 次，合计就是硬上限
+    for attempt in range(MAX_RETRY + 1 + SELFCHECK_MAX):
         sql = llm_generate_sql(question, select_tables(question), metrics, error_hint) if USE_LLM \
             else mock_generate_sql(question)
         out["sql"] = sql
         out["attempts"] = attempt + 1
         res = run_sql(sql)
         if res["ok"]:
-            out.update(ok=True, columns=res["columns"], rows=res["rows"])
+            # 自检：执行成功 ≠ 结果对。先看结果可不可疑，可疑就先探针、再决定要不要重试
+            sus, reason = looks_suspicious(question, res["columns"], res["rows"])
+            if sus and selfcheck_used < SELFCHECK_MAX:
+                no_data, why = probe_has_data(question)
+                if no_data:
+                    # 库里本来就没有 → 空/异常是对的，重试只会浪费 token
+                    out.update(ok=True, columns=res["columns"], rows=res["rows"],
+                               readonly_notice=READONLY_NOTICE if has_soft_write_hint(question) else None,
+                               selfcheck=f"探针判定「本来就没有」：{why}，未重试")
+                    return out
+                selfcheck_used += 1
+                out["selfcheck"] = f"结果可疑（{reason}），探针确认有数据 → 带上下文重试"
+                error_hint = selfcheck_hint(reason)
+                continue
+            out.update(ok=True, columns=res["columns"], rows=res["rows"],
+                       readonly_notice=READONLY_NOTICE if has_soft_write_hint(question) else None)
             return out
         error_hint = res["error"]
     out["error"] = error_hint
