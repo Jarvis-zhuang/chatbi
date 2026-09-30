@@ -9,3 +9,7 @@ _out.txt
 # local scratch / agent workspace
 .workbuddy/
 _tmp_*
+
+# eval evidence files (local only)
+_eval_*.txt
+_eval_base.json

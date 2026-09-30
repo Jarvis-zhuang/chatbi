@@ -33,6 +33,7 @@ D1 精读路线（623 行里真正要读的只有约 277 行，别从头啃）
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import re
@@ -525,7 +526,10 @@ def mock_generate_sql(question: str) -> str:
             return f"-- GLOSSARY\n{h['metric_name']}：{h['definition']}\n口径：{h['formula']}（单位 {h['unit']}，来源：{h['source_doc']}）"
 
     expr, need_tables, label = pick_metric(q)
-    anchor = _anchor_date()
+    # 2026-09-30 决策 B：相对时间按**真实今天**换算（不再以数据截止日为基准），
+    # 与 llm_generate_sql 的 _anchor_hint() 保持一致。变量名沿用 anchor 以免牵动下面所有引用。
+    # 评测时可用 EVAL_NOW 固定"今天"，保证可复现。
+    anchor = get_now_date()
     anchor_ym = anchor[:7]
     prev_ym = _prev_month(anchor_ym)
     last_year_ym = f"{int(anchor_ym[:4]) - 1:04d}-{anchor_ym[5:7]}"
@@ -717,20 +721,39 @@ def get_anchor_date() -> str:
     return _ANCHOR_DATE
 
 
+def get_now_date() -> str:
+    """相对时间的换算基准 = 真实当前日期（用户心里的「本月」就是这个月）。
+
+    2026-09-30 决策 B：相对时间按真实时钟换算，**不再**以数据截止日为基准。
+    评测时用环境变量 EVAL_NOW 固定住，否则今天跑和明天跑结果不同 → 评测不可复现。
+    """
+    fixed = os.getenv("EVAL_NOW", "").strip()
+    if fixed:
+        return fixed
+    return datetime.date.today().isoformat()
+
+
 def _anchor_hint() -> str:
-    """拼进 prompt 的时间锚点说明 + 几个常用相对时间的对照表。"""
-    d = get_anchor_date()
-    year, month = int(d[:4]), int(d[5:7])
-    prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
-    ym = d[:7]
-    ym_prev = f"{prev_year:04d}-{prev_month:02d}"
+    """拼进 prompt 的时间口径说明 + 常用相对时间的对照表。
+
+    2026-09-30 改（决策 B，他当面拍的板）：
+    - 相对时间**按真实今天**换算——用户说「本月」就是当月，不是「数据最后那个月」；
+    - 数据截止日**降级为解释器**：只用来解释空结果，不再拿它篡改用户的口径；
+    - 明令禁止「查不到就偷偷换成数据截止日」——那是答非所问，而且用户不会察觉。
+    """
+    now = get_now_date()
+    anchor = get_anchor_date()
+    now_ym = now[:7]
     return (
-        "\n\n【时间锚点·必须遵守】"
-        f"数据截止日期 = {d}。问题里的「本月/上月/同比/环比/近N月/近N年」一律以该日期为基准换算。\n"
-        "禁止使用 date('now') 或 strftime('now')——真实时钟会指到没有数据的月份，导致查空或错位。\n"
-        f"本月 = strftime('%Y-%m', stat_date) = '{ym}'；上月 = '{ym_prev}'；"
-        f"近半年 = stat_date >= date('{d}', '-6 months')；近一年 = stat_date >= date('{d}', '-12 months')。\n"
-        "年份也同理：今年指该日期所在年，去年同期指上一年同月/同期。"
+        "\n\n【时间口径·必须遵守】"
+        f"今天的日期 = {now}。问题里的「本月/上月/同比/环比/近N月/近N年」一律按**今天**换算，"
+        "这是用户心里的口径。\n"
+        f"本月 = strftime('%Y-%m', stat_date) = '{now_ym}'；上月 = '{_prev_month(now_ym)}'；"
+        f"近半年 = stat_date >= date('{now}', '-6 months')；近一年 = stat_date >= date('{now}', '-12 months')。\n"
+        f"（数据的截止日期是 {anchor}，它**只用于解释空结果**，不要拿它来改查询条件。）\n"
+        "**重要**：如果按上面换算出的时间段超出了数据截止日，**就照实查那个时间段**——"
+        "返回空结果是正确且预期的，**严禁擅自把条件改成数据截止日所在的月份**。\n"
+        "（用户问 9 月，你却给 8 月的数据 = 答非所问，且用户不会察觉，这是最坏的结果。）"
     )
 
 
@@ -747,6 +770,9 @@ OUTPUT_CONTRACT = """
    需要 LIMIT 时同时加一列次级排序（plant_name / province），避免并列值导致结果不稳定。
 5. 分组粒度：问"各 X"就按 X 分组**返回多行**（如"各电站"→每行一个电站），不要聚合成一个总计值。
 6. 趋势/走势：输出「时间标签 + 数值」两列，时间用 strftime 拼成 'YYYY-MM' 或 'YYYY-Qn'。
+7. 同比 / 环比 / 增长率：统一用**小数** ROUND(x, 4)（与「率」一致），**不要乘 100 写成百分比**。
+   （2026-09-30 补：契约原本只规定了「占比用百分比 / 率用小数」，漏了增长率，
+   导致同一道题模型一会儿写 -0.0009、一会儿写 -0.09，评测分数随机抖动 —— 空白比错误更贵。）
 """
 
 LLM_SYSTEM = """你是一名资深数据分析师，负责把中文业务问题翻译成 SQLite SQL。
@@ -820,6 +846,21 @@ def run_sql(sql: str) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _empty_notice(rows: list) -> str | None:
+    """空结果时的一句话解释。
+
+    2026-09-30 决策 B：空结果**不是失败**，但必须说清楚是「本来就没有」而不是「查错了」——
+    用户分不清这两者，而它们的下一步动作完全不同。
+    措辞红线：**不占用用户的词**。不说「我按 8 月算的本月」，
+    而是「数据最新只到 8-31」+「要不要看 8 月的」（依据 → 缺口 → 建议）。
+    """
+    if rows:
+        return None
+    anchor = get_anchor_date()
+    return (f"你要查的时间段暂无数据——数据最新只到 {anchor}。"
+            f"要不要看 {anchor[:7]}（数据最新月份）的？")
+
+
 # ============================================================ 第 6 站：编排（含流式事件）
 def ask_stream(question: str) -> Iterator[dict]:
     """
@@ -886,7 +927,8 @@ def ask_stream(question: str) -> Iterator[dict]:
                            "text": f"返回 {len(result['rows'])} 行，耗时 {result['elapsed_ms']} ms",
                            "columns": result["columns"], "rows": result["rows"],
                            "attempts": attempt + 1, "sql": sql,
-                           "readonly_notice": soft_notice}
+                           "readonly_notice": soft_notice,
+                           "empty_notice": _empty_notice(result["rows"])}
                     return
                 selfcheck_used += 1
                 yield {"event": "selfcheck", "step": 4, "title": f"结果可疑，第 {selfcheck_used} 次自检重试",
@@ -897,7 +939,8 @@ def ask_stream(question: str) -> Iterator[dict]:
                    "text": f"返回 {len(result['rows'])} 行，耗时 {result['elapsed_ms']} ms",
                    "columns": result["columns"], "rows": result["rows"],
                    "attempts": attempt + 1, "sql": sql,
-                   "readonly_notice": soft_notice}
+                   "readonly_notice": soft_notice,
+                   "empty_notice": _empty_notice(result["rows"])}
             return
         # 考点 2：生成错了怎么办 → 把原始报错喂回模型重生成，MAX_RETRY 是硬上限
         error_hint = result["error"]
@@ -911,7 +954,7 @@ def ask(question: str) -> dict:
     """非流式版本，给 eval.py 用"""
     out = {"question": question, "sql": None, "ok": False, "refused": False, "attempts": 0,
            "error": None, "columns": None, "rows": None, "answer": None, "readonly_notice": None,
-           "selfcheck": None}
+           "selfcheck": None, "selfcheck_retried": False}
 
     # 护栏：负样本拒答优先于任何 SQL 生成（流式、非流式两条都用同一套判定）
     if is_write_intent(question):
@@ -947,6 +990,7 @@ def ask(question: str) -> dict:
                     return out
                 selfcheck_used += 1
                 out["selfcheck"] = f"结果可疑（{reason}），探针确认有数据 → 带上下文重试"
+                out["selfcheck_retried"] = True
                 error_hint = selfcheck_hint(reason)
                 continue
             out.update(ok=True, columns=res["columns"], rows=res["rows"],

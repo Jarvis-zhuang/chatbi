@@ -204,6 +204,10 @@ function handle(ev, ui) {
       if (ev.readonly_notice) {
         ui.add(`<div class="refuse"><b>只读声明</b><br/>${ev.readonly_notice}</div>`);
       }
+      // 决策 B（2026-09-30）：空结果要给解释，否则用户分不清「本来就没有」和「查错了」
+      if (ev.empty_notice) {
+        ui.add(`<div class="refuse"><b>暂无数据</b><br/>${ev.empty_notice}</div>`);
+      }
       ui.add(`<div class="card"><div class="hint">查询结果 · ${ev.rows.length} 行 · 重试 ${ev.attempts} 次</div>
               <div style="max-height:360px;overflow:auto"><table><thead><tr>${head}</tr></thead>
               <tbody>${body}</tbody></table></div></div>`);

@@ -241,6 +241,19 @@ def main():
         run_selftest()
         return
 
+    # ---- 评测时钟冻结（2026-09-30 v6 事故复盘）--------------------------
+    # 决策 B：产品运行时「本月/上月/近一年」按**真实今天**换算（用户心里的口径）。
+    # 但 v6 全量跑分没固定时钟：predict 按 2026-09-30 换算（本月=2026-09，无数据），
+    # 期望 SQL 却按「今天=2026-08-31（数据截止日）」写死 → 基准错开一个月，7 题假错，
+    # 87.1% "暴跌" 到 67.7%。今天跑和明天跑结果都不同 = 评测不可复现。
+    # 修法：**评测**默认把时钟冻结在数据截止日（模拟一个在那天提问的用户），
+    # 期望 SQL 与之对齐；产品行为不变。要模拟其他日期，显式设 EVAL_NOW 覆盖。
+    if not os.environ.get("EVAL_NOW", "").strip():
+        frozen = text2sql.get_anchor_date()
+        os.environ["EVAL_NOW"] = frozen
+        print(f"[评测时钟已冻结] EVAL_NOW = {frozen}"
+              f"（数据截止日；产品运行时仍按真实今天，决策 B 不变）")
+
     with open(os.path.join(BASE_DIR, args.set), encoding="utf-8") as f:
         cases = json.load(f)["cases"]
     if args.only:
@@ -259,7 +272,11 @@ def main():
         note = ""
         rec = {"id": c["id"], "q": q, "type": typ, "sql": out.get("sql"),
                "expected_sql": c.get("sql"), "rows": out.get("rows"),
-               "error": out.get("error"), "refused": out.get("refused")}
+               "error": out.get("error"), "refused": out.get("refused"),
+               # 重试证据：attempts = 这一题总共生成了几次 SQL；selfcheck = 自检说了什么；
+               # selfcheck_retried = 是否真的走了一次自检重试（与「探针判定本来就没有、未重试」区分开）
+               "attempts": out.get("attempts"), "selfcheck": out.get("selfcheck"),
+               "selfcheck_retried": out.get("selfcheck_retried", False)}
 
         if typ == "sql":
             if not out["ok"]:
@@ -315,6 +332,18 @@ def main():
     print()
     print("读法：宽松 - 严格 = 纯格式问题（改 prompt/契约就能修，不是模型能力问题）；")
     print("      真错 = 口径理解/聚合逻辑错了，那才是要靠 RAG、few-shot、自检循环去解决的。")
+
+    # 自检循环的贡献要看「重试后有没有救回来」，光看最终准确率看不出来
+    retried = [r for r in records if (r.get("attempts") or 0) > 1]
+    sc = [r for r in records if r.get("selfcheck_retried")]
+    sc_pass = [r for r in sc if r["verdict"] == "PASS"]
+    print()
+    print(f"重试总览：{len(retried)} 题 attempts>1"
+          + (f"  id: {', '.join(str(r['id']) for r in retried)}" if retried else ""))
+    print(f"  ├ 自检重试（执行成功但结果可疑）  ：{len(sc)} 题"
+          + (f"  id: {', '.join(str(r['id']) for r in sc)}" if sc else ""))
+    print(f"  └ 自检重试后转为 PASS            ：{len(sc_pass)} 题"
+          + (f"  id: {', '.join(str(r['id']) for r in sc_pass)}" if sc_pass else ""))
     sys.exit(0)
 
 

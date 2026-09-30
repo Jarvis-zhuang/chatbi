@@ -131,7 +131,8 @@ GLOSRARY = [
      "SUM(generation_kwh)", "kWh", "公司指标口径表 V3.2"),
     ("等效利用小时", "利用小时,等效小时,发电小时数",
      "统计周期内发电量折算到额定容量下的满发小时数，用于横向对比不同规模电站的效率",
-     "SUM(generation_kwh) / SUM(capacity_mw) / 1000", "h", "公司指标口径表 V3.2"),
+     "SUM(generation_kwh) / 电站额定容量(capacity_mw) / 1000"
+     "（分母取电站额定容量，禁止对 JOIN 后的明细行重复求和）", "h", "公司指标口径表 V3.2"),
     ("弃光率", "限发率,弃风弃光,丢弃率",
      "因电网消纳受限等原因被迫放弃的电量占理论发电量的比例",
      "SUM(curtailment_kwh) / (SUM(generation_kwh) + SUM(curtailment_kwh))", "%", "调度运行报表口径 V1.5"),

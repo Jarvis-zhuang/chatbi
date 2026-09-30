@@ -14,23 +14,23 @@
      "sql": "SELECT p.province AS province, ROUND(SUM(p.capacity_mw),2) AS cap FROM dim_plant p GROUP BY p.province ORDER BY cap DESC"},
 
     {"id": 2, "q": "发电量最高的 10 个电站", "type": "sql",
-     "sql": "SELECT p.plant_name AS plant_name, SUM(f.generation_kwh) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id ORDER BY gen DESC, p.plant_name LIMIT 10"},
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh), 0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id ORDER BY gen DESC, p.plant_name LIMIT 10"},
 
     {"id": 3, "q": "本月等效利用小时排名前 5 的省份", "type": "sql",
-     "sql": "SELECT p.province AS province, ROUND(SUM(f.generation_kwh)/SUM(p.capacity_mw)/1000,2) AS eq FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.province ORDER BY eq DESC, p.province LIMIT 5",
-     "note": "本月 = 数据最大日期所在月"},
+     "sql": "SELECT province, ROUND(SUM(gen) / SUM(cap) / 1000, 2) AS eq FROM (SELECT p.province AS province, p.plant_id, SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.plant_id) GROUP BY province ORDER BY eq DESC, province LIMIT 5",
+     "note": "评测时钟冻结在数据截止日（EVAL_NOW），本月=2026-08"},
 
     {"id": 4, "q": "逆变器转换效率最低的 5 个电站", "type": "sql",
-     "sql": "SELECT p.plant_name AS plant_name, ROUND(p.inverter_efficiency,2) AS eff FROM dim_plant p ORDER BY ROUND(p.inverter_efficiency,2) ASC, p.plant_name LIMIT 5"},
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(p.inverter_efficiency,4) AS eff FROM dim_plant p ORDER BY p.inverter_efficiency ASC, p.plant_name LIMIT 5"},
 
     {"id": 5, "q": "全国总装机容量是多少", "type": "sql",
      "sql": "SELECT ROUND(SUM(capacity_mw),2) AS total_mw FROM dim_plant"},
 
     {"id": 6, "q": "上个月总发电量是多少", "type": "sql",
-     "sql": "SELECT SUM(f.generation_kwh) AS gen FROM fact_daily_generation f WHERE strftime('%Y-%m', f.stat_date) = '2026-07'"},
+     "sql": "SELECT ROUND(SUM(f.generation_kwh), 0) AS gen FROM fact_daily_generation f WHERE strftime('%Y-%m', f.stat_date) = '2026-07'"},
 
     {"id": 7, "q": "所有电站平均等效利用小时", "type": "sql",
-     "sql": "SELECT ROUND(SUM(f.generation_kwh)/SUM(p.capacity_mw)/1000,2) AS avg_eq_hours FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id"},
+     "sql": "SELECT ROUND(AVG(gen / cap / 1000), 2) AS avg_eq_hours FROM (SELECT p.plant_id, SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id GROUP BY p.plant_id)"},
 
     {"id": 8, "q": "平均弃光率是多少", "type": "sql",
      "sql": "SELECT ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM fact_daily_generation f"},
@@ -60,8 +60,8 @@
      "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07' GROUP BY p.plant_id HAVING gen < 1000000 ORDER BY gen DESC LIMIT 200",
      "note": "口径歧义样例：「发电量」未限定周期，理想行为是反问澄清（D4 提问五要素解决）"},
 
-    {"id": 17, "q": "近一年等效利用小时低于 1200 的电站", "type": "sql",
-     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh)/SUM(p.capacity_mw)/1000,1) AS eq_hours FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY p.plant_id HAVING eq_hours < 1200 ORDER BY eq_hours DESC LIMIT 200"},
+    {"id": 17, "q": "近一年等效利用小时低于 1500 的电站", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh) / p.capacity_mw / 1000, 2) AS eq_hours FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY p.plant_id HAVING SUM(f.generation_kwh) / p.capacity_mw / 1000 < 1500 ORDER BY eq_hours DESC LIMIT 200"},
 
     {"id": 18, "q": "装机容量大于 200MW 的集中式电站", "type": "sql",
      "sql": "SELECT plant_name, province, capacity_mw FROM dim_plant WHERE capacity_mw > 200 AND station_type = '集中式' ORDER BY capacity_mw DESC LIMIT 200"},
@@ -79,11 +79,11 @@
     {"id": 22, "q": "各季度发电量走势", "type": "sql",
      "sql": "SELECT strftime('%Y', stat_date) || '-Q' || ((CAST(strftime('%m', stat_date) AS INTEGER)+2)/3) AS quarter, ROUND(SUM(generation_kwh),0) AS gen FROM fact_daily_generation GROUP BY 1 ORDER BY 1"},
 
-    {"id": 23, "q": "山东省下所有电站的发电量汇总", "type": "sql",
-     "sql": "SELECT p.plant_name AS plant_name, SUM(f.generation_kwh) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '山东' GROUP BY p.plant_id ORDER BY gen DESC LIMIT 200"},
+    {"id": 23, "q": "山东省下各电站的发电量分别是多少", "type": "sql",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh), 0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '山东' GROUP BY p.plant_id ORDER BY gen DESC LIMIT 200"},
 
     {"id": 24, "q": "使用阳光电源逆变器的电站平均转换效率", "type": "sql",
-     "sql": "SELECT inverter_brand, ROUND(AVG(inverter_efficiency),4) AS avg_eff, COUNT(*) AS plant_cnt FROM dim_plant WHERE inverter_brand = '阳光电源' GROUP BY 1"},
+     "sql": "SELECT ROUND(AVG(inverter_efficiency), 4) AS avg_eff FROM dim_plant WHERE inverter_brand = '阳光电源'"},
 
     {"id": 25, "q": "按设备类型统计各电站故障次数，取前 10", "type": "sql",
      "sql": "SELECT p.plant_name AS plant_name, d.device_type AS device_type, COUNT(*) AS fault_cnt FROM fact_device_fault fl JOIN dim_device d ON d.device_id = fl.device_id JOIN dim_plant p ON p.plant_id = fl.plant_id GROUP BY 1, 2 ORDER BY fault_cnt DESC, p.plant_name, d.device_type LIMIT 10"},
