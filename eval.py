@@ -12,6 +12,7 @@ eval.py —— 30 条评测集跑分（D3 的核心产出：第一个准确率�
 from __future__ import annotations
 
 import argparse
+import decimal
 import itertools
 import json
 import os
@@ -29,12 +30,20 @@ LOOSE_MAX_ROWS = 500
 
 
 def norm_rows(columns, rows):
-    """把结果集约简成可比较的形式：数值保留 2 位小数，行排序，忽略列名差异"""
+    """把结果集约简成可比较的形式：数值保留 2 位小数，行排序，忽略列名差异
+
+    2026-10-22 修（真模型 PG 档回归暴露）：Decimal 必须和 int/float 一样走数值归一化。
+    背景：dialect 注入后模型按 PG 规范写 ROUND(x::numeric, n)，PG 的 numeric 返回
+    Decimal('1436.50')，而 SQLite 的 REAL 返回 float 1436.5。数值相等、表示不同，
+    旧的 norm_rows 把 Decimal 丢给 str()，'1436.50' != '1436.5' → 判 FAIL。
+    这不是模型错，是尺子对"数值表示"过敏——尺子该比数值，不该比字符串长什么样。
+    SQLite 路径不产生 Decimal，所以这次修复对原有判定零影响（已用 31 题 MOCK 双档回归验证）。
+    """
     out = []
     for r in rows:
         cell = []
         for v in r:
-            if isinstance(v, (int, float)):
+            if isinstance(v, (int, float, decimal.Decimal)):
                 cell.append(round(float(v), 2))
             else:
                 cell.append(str(v))
@@ -315,8 +324,18 @@ def main():
 
     if args.dump:
         path = os.path.join(BASE_DIR, args.dump)
+
+        def _jsonable(o):
+            # 2026-10-22：PG 的 numeric 列返回 Decimal，JSON 不认识它。
+            # 同一个方言差异的第二张脸——第一张是判定（norm_rows），这一张是落盘。
+            # 判定归判定、落盘归落盘，两处都得修，bug 才会真的消失。
+            if isinstance(o, decimal.Decimal):
+                return float(o)
+            raise TypeError(f"{o.__class__.__name__} 不在可序列化白名单里")
+
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"set": args.set, "cases": records}, f, ensure_ascii=False, indent=2)
+            json.dump({"set": args.set, "cases": records}, f, ensure_ascii=False, indent=2,
+                      default=_jsonable)
         print(f"dump -> {path}")
 
     total = len(cases)

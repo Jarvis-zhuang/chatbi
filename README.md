@@ -459,7 +459,13 @@ SUM(generation_kwh) / SUM(capacity_mw) / 1000
   - 垫片从容器捞回仓库：`pg_shim.sql`（幂等）—— 原来只在容器里跑过，`docker rm pg` 就丢，31 题当天全崩且查不到原因（**环境状态不在版本库 = 不可复现**）
   - PG 写法冒烟实测：`to_char` 月度聚合 / `to_char(...,'Q')` 季度分组 / `::numeric` ROUND 三条在 `chatbi_ro` 上真执行通过
   - MOCK 31 题两档回归：SQLite 与 PG 均 **22 严格 + 23 宽松、零重试** —— 与 10/21 完全一致，**尺子没动**
-  - ⚠️ 真模型 31 题回归待 `OPENAI_API_KEY`（本机未配置，`dialect_check` 只证明 prompt 说对了方言，没证明模型照着写）
+  - ⚠️ ~~真模型 31 题回归待 `OPENAI_API_KEY`~~ ✅ **10/22 已跑完（DeepSeek key，庄提供）**：
+    - **PG 档 27/31 严格（87.1%）+ 29/31 宽松（93.5%）**；SQLite 档同 key 同题 **28/31 严格（90.3%）+ 30/31 宽松（96.8%）**
+    - **逐题判定 28/31 一致**，差异 3 题：#3 SQLite PASS→PG 形状错（值对）、#25 SQLite 形状错→PG PASS（反向）、#21 SQLite PASS→PG 真错
+    - 按 W1 D1 完成标准「偏差 ≤1 题」**达标**（严格口径净差 1 题）；#25 反向 PASS 说明存在生成波动，#21 差异**不能断定是方言导致**【推断】
+    - 方言注入的硬证据：模型生成的 SQL 自己写 `ROUND(SUM(x)::numeric, 2)` / `to_char(stat_date::date,'YYYY-MM')` / `INTERVAL` —— prompt 说对了，模型照着写
+    - 🎯 **自检循环首次在真模型路径开火**：#21 时间窗没作用到外层 → `looks_suspicious` 判可疑 → 探针确认有数据 → 带上下文重试（仍未修对，`SELFCHECK_MAX=1` 到此为止）
+    - 🔧 顺带修了尺子两个 bug（同根因、两张脸）：`norm_rows` 不认 `Decimal`（PG numeric 返回 `Decimal('1436.50')` vs SQLite float `1436.5`，数值对、字符串不同 → 判 FAIL）；`--dump` 不序列化 `Decimal`（跑完 31 题在落盘那步崩了）。**修尺子前先证明尺子没动**：改后 SQLite 档 MOCK 31 题仍是 22 严格 + 23 宽松、逐题判定与改前完全一致，`--selftest` 7 条边界用例全过
 - [ ] D4：few-shot 打 #3/#7——等效小时**聚合级**（省份/全国）仍用旧公式 SUM/SUM，明细级已对，靶子明确
 - [x] **D2 ② · 10/21 停摆周重活模式完成**：业务库 SQLite → Postgres（`USE_PG=1` 切换，SQLite 兜底原样保留）
   - 灌数 60 站 × 730 天 = 43,800 行，`compare_db.py` 三方对账（12 项总量 + 60 站分组 SUM）全中——迁移零损耗
