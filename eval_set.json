@@ -57,7 +57,7 @@
      "sql": "SELECT ROUND(100.0*SUM(CASE WHEN region='西北' AND station_type='集中式' THEN capacity_mw ELSE 0 END)/SUM(capacity_mw),2) AS pct FROM dim_plant"},
 
     {"id": 16, "q": "上月发电量低于 100 万 kWh 的电站有哪些", "type": "sql",
-     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07' GROUP BY p.plant_id HAVING gen < 1000000 ORDER BY gen DESC LIMIT 200",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07' GROUP BY p.plant_id HAVING ROUND(SUM(f.generation_kwh),0) < 1000000 ORDER BY gen DESC LIMIT 200",
      "note": "口径歧义样例：「发电量」未限定周期，理想行为是反问澄清（D4 提问五要素解决）"},
 
     {"id": 17, "q": "近一年等效利用小时低于 1500 的电站", "type": "sql",
@@ -67,7 +67,7 @@
      "sql": "SELECT plant_name, province, capacity_mw FROM dim_plant WHERE capacity_mw > 200 AND station_type = '集中式' ORDER BY capacity_mw DESC LIMIT 200"},
 
     {"id": 19, "q": "弃光率超 5% 的电站有哪些", "type": "sql",
-     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id HAVING curt_rate > 0.05 ORDER BY curt_rate DESC LIMIT 200",
+     "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id HAVING ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) > 0.05 ORDER BY curt_rate DESC LIMIT 200",
      "note": "业务黑话样例：弃光率写成了「超 5%」而不是字段名"},
 
     {"id": 20, "q": "过去 12 个月全国月度发电量趋势", "type": "sql",

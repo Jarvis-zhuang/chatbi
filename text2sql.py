@@ -39,7 +39,7 @@ import os
 import re
 from typing import Iterator
 
-from db import execute_sql, connect_readonly
+from db import execute_sql, connect_readonly, DIALECT
 
 # ============================================================ 配置
 MAX_RETRY = 2           # 考点 4：自修正硬上限，防 Agent 死循环
@@ -618,6 +618,10 @@ def mock_generate_sql(question: str) -> str:
         )
 
     # —— 意图 7：筛选 / 阈值
+    # ⚠️ HAVING 里必须重复完整表达式、不能用 SELECT 别名：PG 的 HAVING 不认输出别名
+    #   （ORDER BY 才认），SQLite 认——2026-10-21 迁移回归实踩，#16/#19 在 PG 上
+    #   column "gen" does not exist。这是垫片救不了的方言差异（解析作用域规则，不是函数）。
+    #   表达式带 ROUND 是为了和 SELECT 里的别名语义逐字节一致（先舍入再过滤）。
     m_th = re.search(r"(低于|小于|少于|高于|大于|超过|高于|超|高过)\s*(\d+(?:\.\d+)?)", q)
     if m_th:
         op = "<" if m_th.group(1) in ("低于", "小于", "少于") else ">"
@@ -626,12 +630,12 @@ def mock_generate_sql(question: str) -> str:
         if any(k in q for k in ["弃光", "限发"]):
             return (
                 f"SELECT p.plant_name, ROUND(SUM(f.curtailment_kwh)/NULLIF(SUM(f.generation_kwh)+SUM(f.curtailment_kwh),0),4) AS curt_rate "
-                f"FROM {base_from} {extra} GROUP BY p.plant_id HAVING curt_rate {op} {float(val)/100} ORDER BY curt_rate DESC LIMIT {ROW_LIMIT}"
+                f"FROM {base_from} {extra} GROUP BY p.plant_id HAVING ROUND(SUM(f.curtailment_kwh)/NULLIF(SUM(f.generation_kwh)+SUM(f.curtailment_kwh),0),4) {op} {float(val)/100} ORDER BY curt_rate DESC LIMIT {ROW_LIMIT}"
             )
         if "利用小时" in q or "等效" in q:
             return (
                 f"SELECT p.plant_name, ROUND(SUM(f.generation_kwh)/NULLIF(SUM(p.capacity_mw),0)/1000,1) AS eq_hours "
-                f"FROM {base_from} {extra} GROUP BY p.plant_id HAVING eq_hours {op} {val} ORDER BY eq_hours DESC LIMIT {ROW_LIMIT}"
+                f"FROM {base_from} {extra} GROUP BY p.plant_id HAVING ROUND(SUM(f.generation_kwh)/NULLIF(SUM(p.capacity_mw),0)/1000,1) {op} {val} ORDER BY eq_hours DESC LIMIT {ROW_LIMIT}"
             )
         if "装机" in q or "容量" in q:
             type_cond = " AND p.station_type = '集中式'" if "集中式" in q else ""
@@ -641,7 +645,7 @@ def mock_generate_sql(question: str) -> str:
             )
         return (
             f"SELECT p.plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM {base_from} {extra} "
-            f"GROUP BY p.plant_id HAVING gen {op} {float(val)*10000} ORDER BY gen DESC LIMIT {ROW_LIMIT}"
+            f"GROUP BY p.plant_id HAVING ROUND(SUM(f.generation_kwh),0) {op} {float(val)*10000} ORDER BY gen DESC LIMIT {ROW_LIMIT}"
         )
 
     # —— 意图 8：设备故障（多表关联）
@@ -744,17 +748,83 @@ def _anchor_hint() -> str:
     now = get_now_date()
     anchor = get_anchor_date()
     now_ym = now[:7]
+    d = dx()  # 2026-10-22：示例里的日期表达式随方言生成，不再写死 SQLite 写法
     return (
         "\n\n【时间口径·必须遵守】"
         f"今天的日期 = {now}。问题里的「本月/上月/同比/环比/近N月/近N年」一律按**今天**换算，"
         "这是用户心里的口径。\n"
-        f"本月 = strftime('%Y-%m', stat_date) = '{now_ym}'；上月 = '{_prev_month(now_ym)}'；"
-        f"近半年 = stat_date >= date('{now}', '-6 months')；近一年 = stat_date >= date('{now}', '-12 months')。\n"
+        f"本月 = {d['ym']('stat_date')} = '{now_ym}'；上月 = '{_prev_month(now_ym)}'；"
+        f"近半年 = stat_date >= {d['offset'](now, 6, 'months')}；"
+        f"近一年 = stat_date >= {d['offset'](now, 12, 'months')}。\n"
         f"（数据的截止日期是 {anchor}，它**只用于解释空结果**，不要拿它来改查询条件。）\n"
         "**重要**：如果按上面换算出的时间段超出了数据截止日，**就照实查那个时间段**——"
         "返回空结果是正确且预期的，**严禁擅自把条件改成数据截止日所在的月份**。\n"
         "（用户问 9 月，你却给 8 月的数据 = 答非所问，且用户不会察觉，这是最坏的结果。）"
     )
+
+
+# ============================================================ 方言层（W1 D2）
+# 面试点：方言为什么必须"注入 prompt"，而不是靠垫片把两个库装作一样？
+#   ① 垫片是拐杖不是腿：Neon/Supabase 免费档不让建函数，上云那天垫片就没了；
+#   ② 垫片只覆盖"我们知道会用到"的那几种写法，模型写出第四种它就接不住；
+#   ③ 最贵的是语义漂移——date('2026-08-31','-6 months') SQLite 给 3-03（2/31 溢出），
+#      PG 的 INTERVAL 给 2-28。垫片只能二选一，另一边就永远差一天，而且没人会发现。
+# 所以分工是：垫片救存量（eval_set 的 gold + MOCK 规则引擎，改它们等于改尺子），
+#            注入救增量（LLM 每次新生成的 SQL）。
+#
+# DIALECT 来自 db 层（单一事实源）：只有连接层知道现在连的是哪个库。
+DIALECT_SPEC = {
+    "sqlite": {
+        "name": "SQLite",
+        "ym": lambda col: f"strftime('%Y-%m', {col})",
+        "quarter": lambda col: (
+            f"strftime('%Y', {col}) || '-Q' || "
+            f"((CAST(strftime('%m', {col}) AS INTEGER) + 2) / 3)"
+        ),
+        "offset": lambda lit, n, unit: f"date('{lit}', '-{n} {unit}')",
+        "round": lambda expr, n: f"ROUND({expr}, {n})",
+        "contract_time": (
+            "时间用 strftime('%Y-%m', stat_date) 生成 'YYYY-MM'；"
+            "季度用 strftime('%Y', stat_date) || '-Q' || "
+            "((CAST(strftime('%m', stat_date) AS INTEGER)+2)/3) 生成 'YYYY-Qn'"
+        ),
+        "rules": (
+            "取月份用 strftime('%Y-%m', stat_date)；日期偏移用 date(stat_date, '-6 months')；"
+            "ROUND(x, n) 对 REAL 可以直接使用"
+        ),
+    },
+    "postgres": {
+        "name": "PostgreSQL",
+        "ym": lambda col: f"to_char({col}::date, 'YYYY-MM')",
+        "quarter": lambda col: (
+            f"to_char({col}::date, 'YYYY') || '-Q' || to_char({col}::date, 'Q')"
+        ),
+        "offset": lambda lit, n, unit: (
+            f"to_char(DATE '{lit}' - INTERVAL '{n} {unit}', 'YYYY-MM-DD')"
+        ),
+        "round": lambda expr, n: f"ROUND({expr}::numeric, {n})",
+        "contract_time": (
+            "时间用 to_char(stat_date::date, 'YYYY-MM') 生成 'YYYY-MM'；"
+            "季度用 to_char(stat_date::date, 'YYYY') || '-Q' || "
+            "to_char(stat_date::date, 'Q') 生成 'YYYY-Qn'"
+        ),
+        "rules": (
+            "日期列 stat_date / fault_date / grid_connect_date 是 TEXT('YYYY-MM-DD')，"
+            "字符串比较可直接用（stat_date >= '2026-01-01'）；"
+            "取月份必须 to_char(stat_date::date, 'YYYY-MM')；"
+            "日期偏移必须写成 to_char(stat_date::date - INTERVAL '6 months', 'YYYY-MM-DD')，"
+            "不要用双参数日期函数；"
+            "所有 ROUND 必须先把参数转 numeric：ROUND(SUM(x)::numeric, 2)——"
+            "PG 没有 round(double precision, integer)，直接写会执行报错；"
+            "字符串拼接仍用 ||"
+        ),
+    },
+}
+
+
+def dx():
+    """当前方言的表达式工厂。别在别处再判断一次方言。"""
+    return DIALECT_SPEC[DIALECT]
 
 
 OUTPUT_CONTRACT = """
@@ -775,13 +845,31 @@ OUTPUT_CONTRACT = """
    导致同一道题模型一会儿写 -0.0009、一会儿写 -0.09，评测分数随机抖动 —— 空白比错误更贵。）
 """
 
-LLM_SYSTEM = """你是一名资深数据分析师，负责把中文业务问题翻译成 SQLite SQL。
+
+def output_contract() -> str:
+    """输出契约 + 随方言变化的「时间标签」那一条。
+
+    契约主体（列数 / 精度 / 粒度 / LIMIT）是跨方言的产品约定，不随库变；
+    只有「时间标签怎么写」是语法问题。所以只替换那一句、不重写整段——
+    两份契约漂移比方言漂移更难发现（同一道题两个库判定不同，查一天也查不到起点）。
+    """
+    return OUTPUT_CONTRACT.replace(
+        "时间用 strftime 拼成 'YYYY-MM' 或 'YYYY-Qn'",
+        dx()["contract_time"],
+    )
+
+LLM_SYSTEM_TMPL = """你是一名资深数据分析师，负责把中文业务问题翻译成 {dialect_name} SQL。
 规则：
 1. 只能基于给定的表结构写 SQL，禁止捏造字段；
 2. 只写 SELECT，禁止任何写操作与多语句；
-3. 用 strftime('%Y-%m', stat_date) 取月份，禁止用 SQLite 不支持的函数；
+3. {dialect_rules}；
 4. 输出纯 SQL，不要 markdown 代码围栏，不要解释。
 """
+
+
+def llm_system_prompt() -> str:
+    d = dx()
+    return LLM_SYSTEM_TMPL.format(dialect_name=d["name"], dialect_rules=d["rules"])
 
 
 def llm_generate_sql(question: str, tables: list[str], metrics: list[dict], error_hint: str = "") -> str:
@@ -795,12 +883,12 @@ def llm_generate_sql(question: str, tables: list[str], metrics: list[dict], erro
     user = (
         f"问题：{question}\n\n可用表结构：\n{render_schema(tables)}\n\n业务口径：\n{glossary}\n"
         f"{'上次生成的 SQL 执行失败，报错：' + error_hint + '，请修正后重写。' if error_hint else ''}"
-        f"\n{OUTPUT_CONTRACT}"
+        f"\n{output_contract()}"
         f"\n请输出 SQL：{_anchor_hint()}"
     )
     resp = client.chat.completions.create(
         model=os.getenv("OPENAI_MODEL", "deepseek-chat"),
-        messages=[{"role": "system", "content": LLM_SYSTEM}, {"role": "user", "content": user}],
+        messages=[{"role": "system", "content": llm_system_prompt()}, {"role": "user", "content": user}],
         temperature=0,
     )
     sql = resp.choices[0].message.content.strip()

@@ -452,8 +452,21 @@ SUM(generation_kwh) / SUM(capacity_mw) / 1000
 - [x] **D3 下午**：评测冻结时钟（`EVAL_NOW` 默认=数据截止日，v6 事故修法，产品行为不变）
 - [x] **D3 下午**：「回显截止日 + 反问澄清」→ 已走方案②：在「已知未实现」明写"已识别未实现"
 - [ ] **10/12（旅行回来第一天）**：全量 31 题重跑一次**定稿数字**（v7 是 9 题重跑+22 题沿用 v6，估算 28/31≈90.3% 需全量确认，方差 ±2 题）
+- [x] **D2 ① · 10/22 方言注入 prompt（根治，替换垫片这条拐杖）**
+  - 单一事实源：`db.DIALECT` 由 `USE_PG` 派生，`text2sql` 只读它、不再自己判断方言（原来 `LLM_SYSTEM` 写死「翻译成 SQLite SQL」= prompt 与连接各说一种方言，错不在模型）
+  - `DIALECT_SPEC` 表达式工厂：月份 / 季度 / 日期偏移 / ROUND / 输出契约第 6 条 / 时间口径示例，全部按方言生成（PG：`to_char(::date)` / `INTERVAL` / `ROUND(x::numeric,n)`）
+  - `dialect_check.py`：把「prompt 与连接说同一种方言」变成可执行断言（反向词 + 必备词双向检查，退出码 0/1，可当提交前门槛）
+  - 垫片从容器捞回仓库：`pg_shim.sql`（幂等）—— 原来只在容器里跑过，`docker rm pg` 就丢，31 题当天全崩且查不到原因（**环境状态不在版本库 = 不可复现**）
+  - PG 写法冒烟实测：`to_char` 月度聚合 / `to_char(...,'Q')` 季度分组 / `::numeric` ROUND 三条在 `chatbi_ro` 上真执行通过
+  - MOCK 31 题两档回归：SQLite 与 PG 均 **22 严格 + 23 宽松、零重试** —— 与 10/21 完全一致，**尺子没动**
+  - ⚠️ 真模型 31 题回归待 `OPENAI_API_KEY`（本机未配置，`dialect_check` 只证明 prompt 说对了方言，没证明模型照着写）
 - [ ] D4：few-shot 打 #3/#7——等效小时**聚合级**（省份/全国）仍用旧公式 SUM/SUM，明细级已对，靶子明确
-- [ ] D2 ②：业务库从 SQLite 换 Postgres（只改 `db.py`）
+- [x] **D2 ② · 10/21 停摆周重活模式完成**：业务库 SQLite → Postgres（`USE_PG=1` 切换，SQLite 兜底原样保留）
+  - 灌数 60 站 × 730 天 = 43,800 行，`compare_db.py` 三方对账（12 项总量 + 60 站分组 SUM）全中——迁移零损耗
+  - L3 只读保险平移：`chatbi_ro` 只读账号（最小权限 + 纵深防御，`pg_readonly_setup.sql` 幂等可重跑），已实测 INSERT / CREATE TABLE 均 permission denied
+  - 方言适配（C→A 两步走）：① 止血 = PG 垫片函数（`round(double,int)` / `strftime` / `date`，**复刻 SQLite 语义**而非 PG 语义——如 `date('2026-08-31','-6 months')` 给 2026-03-03 不是 02-28）；② 根治 = dialect 注入 prompt（✅ 10/22 完成，见下 D2 ①）
+  - 31 题回归：**PG 22/31 严格 + 23/31 宽松，与 SQLite 逐题判定 31/31 一致、零重试**。评测集同步 portable 化：gold/MOCK 的 HAVING 不再引用 SELECT 别名（PG 的 HAVING 不认、ORDER BY 才认），改动前后 25 条 gold 的 SQLite 期望值 md5 逐一相同——**尺子没动**
+  - ⚠️ 遗留（10/22 已解决大半）：prompt 方言注入已完成，剩**真模型回归**待 API key；上 Neon/Supabase 免费档若不让建角色，只读保险降级 B（`SET TRANSACTION READ ONLY`）
 - [ ] D4：改 schema 注释 / 加 few-shot / 结构化输出 → 每改跑一次 `eval.py`，记录「改了什么 → 准确率从 X 到 Y」
 - [ ] D4：提问五要素（指标对象/时间范围/分析维度/筛选条件/排序对比）拆槽位，缺槽位就反问
 - [ ] D5：`retrieve_metrics()` 换成 pgvector 向量召回 + Postgres 全文检索，双路 RRF
