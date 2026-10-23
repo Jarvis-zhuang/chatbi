@@ -872,6 +872,46 @@ def llm_system_prompt() -> str:
     return LLM_SYSTEM_TMPL.format(dialect_name=d["name"], dialect_rules=d["rules"])
 
 
+# ============================================================ few-shot（W1 D4）
+# 打一个已定位且可治的病（10/22 真模型回归诊断）：
+#   病② #3/#17 判形状错——模型把演算过程的中间列（发电量、容量）一起输出，
+#       契约第 1 条写了「不要附赠」照样犯。
+#
+# 10/24 四次重复回归的结论（重要，决定了这里为什么只剩一条示例）：
+#   示例 1（示范「平均」类指标的两段式：先按实体算再取平均）**已撤掉**。它想治的病①
+#   （#7「所有电站平均等效利用小时」写成 SUM(总量)/SUM(总量) 的加权口径）确实偶尔治好，
+#   但它把模型带得在 #3「各省份等效小时」上也用算术平均——而 #3 的 gold 口径恰恰相反
+#   （省级 = 全省总发电 / 全省总容量，加权）。4 次重复：#7 从 0/4 变 1/4，#3 从 4/4 掉到 1/4，
+#   净效果为负。**同一个指标两种口径、示例只能教一种，这是 few-shot 的结构性上限。**
+#   口径冲突要靠 RAG 把口径定义检索出来注入（W1 D3 的事），不是靠示例硬教。
+#
+# 两条纪律：
+# 1) **示例题不许取自评测集**。从 31 题里捞标准答案当示范，分数会涨但那是泄题，
+#    不是模型变强——跑分别人信不过，自己也骗自己。示例题是手写的新题。
+# 2) 示例 SQL 必须**自己先跑通**（README「few-shot 示例自证」），并且随方言渲染。
+FEWSHOT_QUESTIONS = {
+    "sqlite": [
+        ("各省份平均装机容量是多少",
+         "SELECT province, ROUND(AVG(capacity_mw), 2) AS avg_capacity_mw FROM dim_plant "
+         "GROUP BY province ORDER BY avg_capacity_mw DESC"),
+    ],
+    "postgres": [
+        ("各省份平均装机容量是多少",
+         "SELECT province, ROUND(AVG(capacity_mw)::numeric, 2) AS avg_capacity_mw FROM dim_plant "
+         "GROUP BY province ORDER BY avg_capacity_mw DESC"),
+    ],
+}
+
+
+def fewshot_block() -> str:
+    """示例段。示范只输出问题真正要的列（反例 = 把发电量、容量这些演算中间量一起输出）。"""
+    lines = ["示例（先学这条再答新问题）："]
+    for q, sql in FEWSHOT_QUESTIONS[DIALECT]:
+        lines.append(f"问：{q}")
+        lines.append(f"SQL：{sql}")
+    return "\n".join(lines)
+
+
 def llm_generate_sql(question: str, tables: list[str], metrics: list[dict], error_hint: str = "") -> str:
     """真模型模式：DeepSeek / OpenAI 兼容接口"""
     from openai import OpenAI  # 延迟导入：MOCK 模式下不需要装 SDK
@@ -884,6 +924,7 @@ def llm_generate_sql(question: str, tables: list[str], metrics: list[dict], erro
         f"问题：{question}\n\n可用表结构：\n{render_schema(tables)}\n\n业务口径：\n{glossary}\n"
         f"{'上次生成的 SQL 执行失败，报错：' + error_hint + '，请修正后重写。' if error_hint else ''}"
         f"\n{output_contract()}"
+        f"\n{fewshot_block()}"
         f"\n请输出 SQL：{_anchor_hint()}"
     )
     resp = client.chat.completions.create(
