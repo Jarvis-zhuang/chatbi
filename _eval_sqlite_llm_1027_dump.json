@@ -1,0 +1,2078 @@
+{
+  "set": "eval_set.json",
+  "cases": [
+    {
+      "id": 1,
+      "q": "各省份装机容量排名",
+      "type": "sql",
+      "sql": "SELECT p.province AS province, ROUND(SUM(p.capacity_mw),2) AS 装机容量MW FROM dim_plant p  GROUP BY p.province ORDER BY 装机容量MW DESC, p.province",
+      "expected_sql": "SELECT p.province AS province, ROUND(SUM(p.capacity_mw),2) AS cap FROM dim_plant p GROUP BY p.province ORDER BY cap DESC",
+      "rows": [
+        [
+          "青海",
+          1436.5
+        ],
+        [
+          "甘肃",
+          1024.4
+        ],
+        [
+          "内蒙古",
+          720.3
+        ],
+        [
+          "宁夏",
+          575.2
+        ],
+        [
+          "新疆",
+          539.3
+        ],
+        [
+          "山西",
+          388.2
+        ],
+        [
+          "河北",
+          237.1
+        ],
+        [
+          "山东",
+          157.6
+        ],
+        [
+          "福建",
+          155.4
+        ],
+        [
+          "安徽",
+          121.1
+        ],
+        [
+          "江苏",
+          117.2
+        ],
+        [
+          "河南",
+          112.5
+        ],
+        [
+          "浙江",
+          102.9
+        ],
+        [
+          "广东",
+          101.6
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "青海",
+          1436.5
+        ],
+        [
+          "甘肃",
+          1024.4
+        ],
+        [
+          "内蒙古",
+          720.3
+        ],
+        [
+          "宁夏",
+          575.2
+        ],
+        [
+          "新疆",
+          539.3
+        ],
+        [
+          "山西",
+          388.2
+        ],
+        [
+          "河北",
+          237.1
+        ],
+        [
+          "山东",
+          157.6
+        ],
+        [
+          "福建",
+          155.4
+        ],
+        [
+          "安徽",
+          121.1
+        ],
+        [
+          "江苏",
+          117.2
+        ],
+        [
+          "河南",
+          112.5
+        ],
+        [
+          "浙江",
+          102.9
+        ],
+        [
+          "广东",
+          101.6
+        ]
+      ]
+    },
+    {
+      "id": 2,
+      "q": "发电量最高的 10 个电站",
+      "type": "sql",
+      "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),2) AS 发电量kWh FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id  GROUP BY p.plant_id ORDER BY 发电量kWh DESC, p.plant_name LIMIT 10",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh), 0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id ORDER BY gen DESC, p.plant_name LIMIT 10",
+      "rows": [
+        [
+          "沙丘农光互补电站-43",
+          1483514485.44
+        ],
+        [
+          "中环渔光互补电站-15",
+          1434423569.07
+        ],
+        [
+          "沙丘渔光互补电站-47",
+          950821909.77
+        ],
+        [
+          "中环光伏电站-01",
+          927006717.84
+        ],
+        [
+          "贺兰光伏电站-17",
+          899678557.4
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          843973654.04
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          836095147.7
+        ],
+        [
+          "天合农光互补电站-03",
+          791488695.09
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          765407624.87
+        ],
+        [
+          "沙丘光伏电站-02",
+          765155571.28
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "沙丘农光互补电站-43",
+          1483514485.0
+        ],
+        [
+          "中环渔光互补电站-15",
+          1434423569.0
+        ],
+        [
+          "沙丘渔光互补电站-47",
+          950821910.0
+        ],
+        [
+          "中环光伏电站-01",
+          927006718.0
+        ],
+        [
+          "贺兰光伏电站-17",
+          899678557.0
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          843973654.0
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          836095148.0
+        ],
+        [
+          "天合农光互补电站-03",
+          791488695.0
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          765407625.0
+        ],
+        [
+          "沙丘光伏电站-02",
+          765155571.0
+        ]
+      ]
+    },
+    {
+      "id": 3,
+      "q": "本月等效利用小时排名前 5 的省份",
+      "type": "sql",
+      "sql": "SELECT p.province AS province, ROUND(SUM(f.generation_kwh)/NULLIF(SUM(p.capacity_mw),0)/1000,2) AS 等效利用小时h FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.province ORDER BY 等效利用小时h DESC, p.province LIMIT 5",
+      "expected_sql": "SELECT province, ROUND(SUM(gen) / SUM(cap) / 1000, 2) AS eq FROM (SELECT p.province AS province, p.plant_id, SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.plant_id) GROUP BY province ORDER BY eq DESC, province LIMIT 5",
+      "rows": [
+        [
+          "青海",
+          5.19
+        ],
+        [
+          "新疆",
+          4.99
+        ],
+        [
+          "内蒙古",
+          4.71
+        ],
+        [
+          "甘肃",
+          4.53
+        ],
+        [
+          "宁夏",
+          4.46
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "青海",
+          160.84
+        ],
+        [
+          "新疆",
+          154.78
+        ],
+        [
+          "内蒙古",
+          145.93
+        ],
+        [
+          "甘肃",
+          140.31
+        ],
+        [
+          "宁夏",
+          138.16
+        ]
+      ]
+    },
+    {
+      "id": 4,
+      "q": "逆变器转换效率最低的 5 个电站",
+      "type": "sql",
+      "sql": "SELECT p.plant_name AS plant_name, ROUND(p.inverter_efficiency,2) AS 逆变器转换效率 FROM dim_plant p  GROUP BY p.plant_id ORDER BY 逆变器转换效率 ASC, p.plant_name LIMIT 5",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(p.inverter_efficiency,4) AS eff FROM dim_plant p ORDER BY p.inverter_efficiency ASC, p.plant_name LIMIT 5",
+      "rows": [
+        [
+          "东旭光伏发电厂-04",
+          0.96
+        ],
+        [
+          "东旭农光互补电站-09",
+          0.96
+        ],
+        [
+          "东旭渔光互补电站-50",
+          0.96
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          0.96
+        ],
+        [
+          "广宇渔光互补电站-34",
+          0.96
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "河套光伏发电厂-31",
+          0.9552
+        ],
+        [
+          "河套渔光互补电站-37",
+          0.9565
+        ],
+        [
+          "腾晖渔光互补电站-46",
+          0.9573
+        ],
+        [
+          "金辰山地光伏电站-13",
+          0.9573
+        ],
+        [
+          "玉门渔光互补电站-60",
+          0.9585
+        ]
+      ]
+    },
+    {
+      "id": 5,
+      "q": "全国总装机容量是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(p.capacity_mw),4) AS 装机容量MW FROM dim_plant p ",
+      "expected_sql": "SELECT ROUND(SUM(capacity_mw),2) AS total_mw FROM dim_plant",
+      "rows": [
+        [
+          5789.3
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          5789.3
+        ]
+      ]
+    },
+    {
+      "id": 6,
+      "q": "上个月总发电量是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(f.generation_kwh),4) AS 发电量kWh FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07'",
+      "expected_sql": "SELECT ROUND(SUM(f.generation_kwh), 0) AS gen FROM fact_daily_generation f WHERE strftime('%Y-%m', f.stat_date) = '2026-07'",
+      "rows": [
+        [
+          829493912.78
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          829493913.0
+        ]
+      ]
+    },
+    {
+      "id": 7,
+      "q": "所有电站平均等效利用小时",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(f.generation_kwh)/NULLIF(SUM(p.capacity_mw),0)/1000,4) AS 等效利用小时h FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id ",
+      "expected_sql": "SELECT ROUND(AVG(gen / cap / 1000), 2) AS avg_eq_hours FROM (SELECT p.plant_id, SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id GROUP BY p.plant_id)",
+      "rows": [
+        [
+          4.0459
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          2623.5
+        ]
+      ]
+    },
+    {
+      "id": 8,
+      "q": "平均弃光率是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(f.curtailment_kwh)/NULLIF(SUM(f.generation_kwh)+SUM(f.curtailment_kwh),0),4) AS 弃光率 FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id ",
+      "expected_sql": "SELECT ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM fact_daily_generation f",
+      "rows": [
+        [
+          0.0467
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          0.0467
+        ]
+      ]
+    },
+    {
+      "id": 9,
+      "q": "本月发电量较去年同期增长多少",
+      "type": "sql",
+      "sql": "SELECT ROUND((cur-prev)/prev,4) AS yoy FROM (SELECT SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-08' THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2025-08' THEN f.generation_kwh ELSE 0 END) AS prev FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id )",
+      "expected_sql": "SELECT ROUND((cur-prev)/prev,4) AS yoy FROM (SELECT SUM(CASE WHEN strftime('%Y-%m',stat_date)='2026-08' THEN generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m',stat_date)='2025-08' THEN generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation)",
+      "rows": [
+        [
+          -0.0009
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          -0.0009
+        ]
+      ]
+    },
+    {
+      "id": 10,
+      "q": "山东省本月发电量环比上月变化",
+      "type": "sql",
+      "sql": "SELECT ROUND((cur-prev)/prev,4) AS mom FROM (SELECT SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-08' THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-07' THEN f.generation_kwh ELSE 0 END) AS prev FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '山东')",
+      "expected_sql": "SELECT ROUND((cur-prev)/prev,4) AS mom FROM (SELECT SUM(CASE WHEN strftime('%Y-%m',f.stat_date)='2026-08' THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m',f.stat_date)='2026-07' THEN f.generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id WHERE p.province = '山东')",
+      "rows": [
+        [
+          -0.0452
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          -0.0452
+        ]
+      ]
+    },
+    {
+      "id": 11,
+      "q": "今年前三季度发电量同比去年",
+      "type": "sql",
+      "sql": "SELECT ROUND((cur-prev)/prev,4) AS yoy FROM (SELECT SUM(CASE WHEN strftime('%Y', f.stat_date) = '2026' AND CAST(strftime('%m', f.stat_date) AS INTEGER) BETWEEN 1 AND 9 THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y', f.stat_date) = '2025' AND CAST(strftime('%m', f.stat_date) AS INTEGER) BETWEEN 1 AND 9 THEN f.generation_kwh ELSE 0 END) AS prev FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id )",
+      "expected_sql": "SELECT ROUND((cur-prev)/prev,4) AS yoy FROM (SELECT SUM(CASE WHEN strftime('%Y',stat_date)='2026' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 1 AND 9 THEN generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y',stat_date)='2025' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 1 AND 9 THEN generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation)",
+      "rows": [
+        [
+          -0.1104
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          -0.1104
+        ]
+      ]
+    },
+    {
+      "id": 12,
+      "q": "Q2 发电量环比 Q1 变化多少",
+      "type": "sql",
+      "sql": "SELECT ROUND((cur-prev)/prev,4) AS mom FROM (SELECT SUM(CASE WHEN strftime('%Y', f.stat_date) = '2026' AND CAST(strftime('%m', f.stat_date) AS INTEGER) BETWEEN 4 AND 6 THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y', f.stat_date) = '2026' AND CAST(strftime('%m', f.stat_date) AS INTEGER) BETWEEN 1 AND 3 THEN f.generation_kwh ELSE 0 END) AS prev FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id )",
+      "expected_sql": "SELECT ROUND((q2-q1)/q1,4) AS mom FROM (SELECT SUM(CASE WHEN strftime('%Y',stat_date)='2026' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 4 AND 6 THEN generation_kwh ELSE 0 END) AS q2, SUM(CASE WHEN strftime('%Y',stat_date)='2026' AND CAST(strftime('%m',stat_date) AS INTEGER) BETWEEN 1 AND 3 THEN generation_kwh ELSE 0 END) AS q1 FROM fact_daily_generation)",
+      "rows": [
+        [
+          0.3974
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          0.3974
+        ]
+      ]
+    },
+    {
+      "id": 13,
+      "q": "集中式与分布式装机容量各占多少",
+      "type": "sql",
+      "sql": "SELECT p.station_type AS station_type, ROUND(SUM(p.capacity_mw),2) AS cap_mw, ROUND(100.0*SUM(p.capacity_mw)/(SELECT SUM(capacity_mw) FROM dim_plant),2) AS pct FROM dim_plant p GROUP BY 1 ORDER BY cap_mw DESC",
+      "expected_sql": "SELECT station_type, ROUND(SUM(capacity_mw),2) AS cap_mw, ROUND(100.0*SUM(capacity_mw)/(SELECT SUM(capacity_mw) FROM dim_plant),2) AS pct FROM dim_plant GROUP BY station_type ORDER BY cap_mw DESC",
+      "rows": [
+        [
+          "集中式",
+          4636.0,
+          80.08
+        ],
+        [
+          "分布式",
+          1153.3,
+          19.92
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "集中式",
+          4636.0,
+          80.08
+        ],
+        [
+          "分布式",
+          1153.3,
+          19.92
+        ]
+      ]
+    },
+    {
+      "id": 14,
+      "q": "各省份装机占比分别是多少",
+      "type": "sql",
+      "sql": "SELECT p.province AS province, ROUND(SUM(p.capacity_mw),2) AS cap_mw, ROUND(100.0*SUM(p.capacity_mw)/(SELECT SUM(capacity_mw) FROM dim_plant),2) AS pct FROM dim_plant p GROUP BY 1 ORDER BY cap_mw DESC",
+      "expected_sql": "SELECT province, ROUND(100.0*SUM(capacity_mw)/(SELECT SUM(capacity_mw) FROM dim_plant),2) AS pct FROM dim_plant GROUP BY province ORDER BY pct DESC",
+      "rows": [
+        [
+          "青海",
+          1436.5,
+          24.81
+        ],
+        [
+          "甘肃",
+          1024.4,
+          17.69
+        ],
+        [
+          "内蒙古",
+          720.3,
+          12.44
+        ],
+        [
+          "宁夏",
+          575.2,
+          9.94
+        ],
+        [
+          "新疆",
+          539.3,
+          9.32
+        ],
+        [
+          "山西",
+          388.2,
+          6.71
+        ],
+        [
+          "河北",
+          237.1,
+          4.1
+        ],
+        [
+          "山东",
+          157.6,
+          2.72
+        ],
+        [
+          "福建",
+          155.4,
+          2.68
+        ],
+        [
+          "安徽",
+          121.1,
+          2.09
+        ],
+        [
+          "江苏",
+          117.2,
+          2.02
+        ],
+        [
+          "河南",
+          112.5,
+          1.94
+        ],
+        [
+          "浙江",
+          102.9,
+          1.78
+        ],
+        [
+          "广东",
+          101.6,
+          1.75
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "SHAPE",
+      "strict": false,
+      "loose": true,
+      "note": "预测多给 1 列（值对）",
+      "exp_rows": [
+        [
+          "青海",
+          24.81
+        ],
+        [
+          "甘肃",
+          17.69
+        ],
+        [
+          "内蒙古",
+          12.44
+        ],
+        [
+          "宁夏",
+          9.94
+        ],
+        [
+          "新疆",
+          9.32
+        ],
+        [
+          "山西",
+          6.71
+        ],
+        [
+          "河北",
+          4.1
+        ],
+        [
+          "山东",
+          2.72
+        ],
+        [
+          "福建",
+          2.68
+        ],
+        [
+          "安徽",
+          2.09
+        ],
+        [
+          "江苏",
+          2.02
+        ],
+        [
+          "河南",
+          1.94
+        ],
+        [
+          "浙江",
+          1.78
+        ],
+        [
+          "广东",
+          1.75
+        ]
+      ]
+    },
+    {
+      "id": 15,
+      "q": "西北大基地占全国装机比例是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(100.0*SUM(CASE WHEN region='西北' AND station_type='集中式' THEN capacity_mw ELSE 0 END)/SUM(capacity_mw),2) AS pct FROM dim_plant",
+      "expected_sql": "SELECT ROUND(100.0*SUM(CASE WHEN region='西北' AND station_type='集中式' THEN capacity_mw ELSE 0 END)/SUM(capacity_mw),2) AS pct FROM dim_plant",
+      "rows": [
+        [
+          57.51
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          57.51
+        ]
+      ]
+    },
+    {
+      "id": 16,
+      "q": "上月发电量低于 100 万 kWh 的电站有哪些",
+      "type": "sql",
+      "sql": "SELECT p.plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07' GROUP BY p.plant_id HAVING ROUND(SUM(f.generation_kwh),0) < 1000000.0 ORDER BY gen DESC LIMIT 200",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE strftime('%Y-%m', f.stat_date) = '2026-07' GROUP BY p.plant_id HAVING ROUND(SUM(f.generation_kwh),0) < 1000000 ORDER BY gen DESC LIMIT 200",
+      "rows": [
+        [
+          "淮上光伏电站-39",
+          807554.0
+        ],
+        [
+          "广宇光伏发电厂-53",
+          526316.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "淮上光伏电站-39",
+          807554.0
+        ],
+        [
+          "广宇光伏发电厂-53",
+          526316.0
+        ]
+      ]
+    },
+    {
+      "id": 17,
+      "q": "近一年等效利用小时低于 1500 的电站",
+      "type": "sql",
+      "sql": "SELECT p.plant_name, ROUND(SUM(f.generation_kwh)/NULLIF(SUM(p.capacity_mw),0)/1000,1) AS eq_hours FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY p.plant_id HAVING ROUND(SUM(f.generation_kwh)/NULLIF(SUM(p.capacity_mw),0)/1000,1) < 1500 ORDER BY eq_hours DESC LIMIT 200",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh) / p.capacity_mw / 1000, 2) AS eq_hours FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY p.plant_id HAVING SUM(f.generation_kwh) / p.capacity_mw / 1000 < 1500 ORDER BY eq_hours DESC LIMIT 200",
+      "rows": [
+        [
+          "中环渔光互补电站-15",
+          4.8
+        ],
+        [
+          "中环光伏电站-01",
+          4.8
+        ],
+        [
+          "胶州光伏发电厂-58",
+          4.7
+        ],
+        [
+          "贺兰山地光伏电站-44",
+          4.7
+        ],
+        [
+          "沙丘山地光伏电站-16",
+          4.7
+        ],
+        [
+          "沙丘农光互补电站-43",
+          4.6
+        ],
+        [
+          "蓝星山地光伏电站-29",
+          4.5
+        ],
+        [
+          "沙丘渔光互补电站-47",
+          4.4
+        ],
+        [
+          "玉门光伏电站-19",
+          4.4
+        ],
+        [
+          "玉门渔光互补电站-60",
+          4.3
+        ],
+        [
+          "贺兰农光互补电站-32",
+          4.3
+        ],
+        [
+          "贺兰光伏电站-17",
+          4.3
+        ],
+        [
+          "沙丘光伏电站-02",
+          4.3
+        ],
+        [
+          "玉门山地光伏电站-30",
+          4.2
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          4.2
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          4.1
+        ],
+        [
+          "戈尔光伏发电厂-59",
+          4.0
+        ],
+        [
+          "淮上农光互补电站-33",
+          4.0
+        ],
+        [
+          "东旭光伏发电厂-04",
+          4.0
+        ],
+        [
+          "天合农光互补电站-03",
+          4.0
+        ],
+        [
+          "腾晖渔光互补电站-46",
+          3.9
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          3.9
+        ],
+        [
+          "瑞泰渔光互补电站-20",
+          3.9
+        ],
+        [
+          "瑞泰光伏发电厂-18",
+          3.9
+        ],
+        [
+          "河套光伏发电厂-31",
+          3.8
+        ],
+        [
+          "胶州农光互补电站-48",
+          3.7
+        ],
+        [
+          "河套光伏电站-08",
+          3.7
+        ],
+        [
+          "青格尔山地光伏电站-06",
+          3.7
+        ],
+        [
+          "贺兰渔光互补电站-07",
+          3.6
+        ],
+        [
+          "河套渔光互补电站-37",
+          3.5
+        ],
+        [
+          "蓝星渔光互补电站-36",
+          3.5
+        ],
+        [
+          "广宇渔光互补电站-34",
+          3.5
+        ],
+        [
+          "中环农光互补电站-23",
+          3.4
+        ],
+        [
+          "淮上光伏发电厂-54",
+          3.3
+        ],
+        [
+          "东旭渔光互补电站-50",
+          3.3
+        ],
+        [
+          "胶州光伏电站-26",
+          3.3
+        ],
+        [
+          "恒源光伏电站-22",
+          3.3
+        ],
+        [
+          "恒源山地光伏电站-21",
+          3.3
+        ],
+        [
+          "广宇光伏电站-35",
+          3.2
+        ],
+        [
+          "东旭农光互补电站-09",
+          3.2
+        ],
+        [
+          "恒源渔光互补电站-51",
+          3.1
+        ],
+        [
+          "金辰光伏电站-49",
+          3.1
+        ],
+        [
+          "星耀渔光互补电站-40",
+          3.1
+        ],
+        [
+          "广宇山地光伏电站-24",
+          3.1
+        ],
+        [
+          "天合光伏电站-52",
+          3.0
+        ],
+        [
+          "瑞泰山地光伏电站-12",
+          3.0
+        ],
+        [
+          "瀚海农光互补电站-10",
+          3.0
+        ],
+        [
+          "淮上光伏电站-39",
+          2.9
+        ],
+        [
+          "协鑫渔光互补电站-25",
+          2.9
+        ],
+        [
+          "蓝星光伏电站-14",
+          2.9
+        ],
+        [
+          "青格尔光伏发电厂-55",
+          2.8
+        ],
+        [
+          "广宇光伏发电厂-53",
+          2.8
+        ],
+        [
+          "协鑫光伏发电厂-38",
+          2.8
+        ],
+        [
+          "金辰山地光伏电站-13",
+          2.8
+        ],
+        [
+          "金辰光伏发电厂-41",
+          2.7
+        ],
+        [
+          "星耀光伏发电厂-28",
+          2.7
+        ],
+        [
+          "戈尔光伏电站-11",
+          2.7
+        ],
+        [
+          "星耀山地光伏电站-56",
+          2.6
+        ],
+        [
+          "协鑫农光互补电站-42",
+          2.5
+        ],
+        [
+          "恒源光伏发电厂-27",
+          2.4
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "戈尔光伏发电厂-59",
+          1480.17
+        ],
+        [
+          "淮上农光互补电站-33",
+          1478.79
+        ],
+        [
+          "东旭光伏发电厂-04",
+          1469.53
+        ],
+        [
+          "天合农光互补电站-03",
+          1449.83
+        ],
+        [
+          "腾晖渔光互补电站-46",
+          1444.42
+        ],
+        [
+          "瑞泰光伏发电厂-18",
+          1439.88
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          1438.17
+        ],
+        [
+          "瑞泰渔光互补电站-20",
+          1420.15
+        ],
+        [
+          "河套光伏发电厂-31",
+          1409.0
+        ],
+        [
+          "胶州农光互补电站-48",
+          1358.65
+        ],
+        [
+          "青格尔山地光伏电站-06",
+          1352.77
+        ],
+        [
+          "河套光伏电站-08",
+          1335.99
+        ],
+        [
+          "贺兰渔光互补电站-07",
+          1311.42
+        ],
+        [
+          "蓝星渔光互补电站-36",
+          1286.87
+        ],
+        [
+          "广宇渔光互补电站-34",
+          1282.4
+        ],
+        [
+          "河套渔光互补电站-37",
+          1278.53
+        ],
+        [
+          "中环农光互补电站-23",
+          1248.04
+        ],
+        [
+          "东旭渔光互补电站-50",
+          1216.75
+        ],
+        [
+          "淮上光伏发电厂-54",
+          1209.0
+        ],
+        [
+          "恒源光伏电站-22",
+          1207.15
+        ],
+        [
+          "恒源山地光伏电站-21",
+          1195.79
+        ],
+        [
+          "胶州光伏电站-26",
+          1192.4
+        ],
+        [
+          "东旭农光互补电站-09",
+          1188.51
+        ],
+        [
+          "广宇光伏电站-35",
+          1182.21
+        ],
+        [
+          "广宇山地光伏电站-24",
+          1150.79
+        ],
+        [
+          "金辰光伏电站-49",
+          1140.9
+        ],
+        [
+          "星耀渔光互补电站-40",
+          1137.33
+        ],
+        [
+          "恒源渔光互补电站-51",
+          1131.33
+        ],
+        [
+          "瑞泰山地光伏电站-12",
+          1113.86
+        ],
+        [
+          "瀚海农光互补电站-10",
+          1105.24
+        ],
+        [
+          "天合光伏电站-52",
+          1085.89
+        ],
+        [
+          "蓝星光伏电站-14",
+          1075.69
+        ],
+        [
+          "淮上光伏电站-39",
+          1074.44
+        ],
+        [
+          "协鑫渔光互补电站-25",
+          1044.63
+        ],
+        [
+          "协鑫光伏发电厂-38",
+          1038.5
+        ],
+        [
+          "金辰山地光伏电站-13",
+          1024.51
+        ],
+        [
+          "青格尔光伏发电厂-55",
+          1014.56
+        ],
+        [
+          "广宇光伏发电厂-53",
+          1011.65
+        ],
+        [
+          "戈尔光伏电站-11",
+          1003.72
+        ],
+        [
+          "星耀光伏发电厂-28",
+          976.02
+        ],
+        [
+          "金辰光伏发电厂-41",
+          975.62
+        ],
+        [
+          "星耀山地光伏电站-56",
+          942.01
+        ],
+        [
+          "协鑫农光互补电站-42",
+          930.43
+        ],
+        [
+          "恒源光伏发电厂-27",
+          881.95
+        ]
+      ]
+    },
+    {
+      "id": 18,
+      "q": "装机容量大于 200MW 的集中式电站",
+      "type": "sql",
+      "sql": "SELECT plant_name, province, capacity_mw FROM dim_plant p WHERE p.capacity_mw > 200 AND p.station_type = '集中式' ORDER BY p.capacity_mw DESC LIMIT 200",
+      "expected_sql": "SELECT plant_name, capacity_mw FROM dim_plant WHERE capacity_mw > 200 AND station_type = '集中式' ORDER BY capacity_mw DESC LIMIT 200",
+      "rows": [
+        [
+          "沙丘农光互补电站-43",
+          "青海",
+          434.9
+        ],
+        [
+          "中环渔光互补电站-15",
+          "青海",
+          413.4
+        ],
+        [
+          "沙丘渔光互补电站-47",
+          "内蒙古",
+          298.2
+        ],
+        [
+          "贺兰光伏电站-17",
+          "甘肃",
+          288.1
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          "内蒙古",
+          277.3
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          "青海",
+          277.1
+        ],
+        [
+          "天合农光互补电站-03",
+          "甘肃",
+          274.9
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          "甘肃",
+          267.1
+        ],
+        [
+          "中环光伏电站-01",
+          "青海",
+          264.2
+        ],
+        [
+          "腾晖渔光互补电站-46",
+          "宁夏",
+          245.5
+        ],
+        [
+          "沙丘光伏电站-02",
+          "新疆",
+          241.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "SHAPE",
+      "strict": false,
+      "loose": true,
+      "note": "预测多给 1 列（值对）",
+      "exp_rows": [
+        [
+          "沙丘农光互补电站-43",
+          434.9
+        ],
+        [
+          "中环渔光互补电站-15",
+          413.4
+        ],
+        [
+          "沙丘渔光互补电站-47",
+          298.2
+        ],
+        [
+          "贺兰光伏电站-17",
+          288.1
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          277.3
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          277.1
+        ],
+        [
+          "天合农光互补电站-03",
+          274.9
+        ],
+        [
+          "协鑫山地光伏电站-45",
+          267.1
+        ],
+        [
+          "中环光伏电站-01",
+          264.2
+        ],
+        [
+          "腾晖渔光互补电站-46",
+          245.5
+        ],
+        [
+          "沙丘光伏电站-02",
+          241.0
+        ]
+      ]
+    },
+    {
+      "id": 19,
+      "q": "弃光率超 5% 的电站有哪些",
+      "type": "sql",
+      "sql": "SELECT p.plant_name, ROUND(SUM(f.curtailment_kwh)/NULLIF(SUM(f.generation_kwh)+SUM(f.curtailment_kwh),0),4) AS curt_rate FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id  GROUP BY p.plant_id HAVING ROUND(SUM(f.curtailment_kwh)/NULLIF(SUM(f.generation_kwh)+SUM(f.curtailment_kwh),0),4) > 0.05 ORDER BY curt_rate DESC LIMIT 200",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.plant_id HAVING ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) > 0.05 ORDER BY curt_rate DESC LIMIT 200",
+      "rows": [
+        [
+          "沙丘山地光伏电站-16",
+          0.0885
+        ],
+        [
+          "胶州光伏发电厂-58",
+          0.086
+        ],
+        [
+          "沙丘光伏电站-02",
+          0.0856
+        ],
+        [
+          "河套光伏发电厂-31",
+          0.0738
+        ],
+        [
+          "贺兰山地光伏电站-44",
+          0.0684
+        ],
+        [
+          "中环渔光互补电站-15",
+          0.0664
+        ],
+        [
+          "瑞泰光伏发电厂-18",
+          0.0619
+        ],
+        [
+          "戈尔光伏发电厂-59",
+          0.0617
+        ],
+        [
+          "玉门山地光伏电站-30",
+          0.0605
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          0.0578
+        ],
+        [
+          "贺兰农光互补电站-32",
+          0.0551
+        ],
+        [
+          "东旭光伏发电厂-04",
+          0.0546
+        ],
+        [
+          "贺兰光伏电站-17",
+          0.0518
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "沙丘山地光伏电站-16",
+          0.0885
+        ],
+        [
+          "胶州光伏发电厂-58",
+          0.086
+        ],
+        [
+          "沙丘光伏电站-02",
+          0.0856
+        ],
+        [
+          "河套光伏发电厂-31",
+          0.0738
+        ],
+        [
+          "贺兰山地光伏电站-44",
+          0.0684
+        ],
+        [
+          "中环渔光互补电站-15",
+          0.0664
+        ],
+        [
+          "瑞泰光伏发电厂-18",
+          0.0619
+        ],
+        [
+          "戈尔光伏发电厂-59",
+          0.0617
+        ],
+        [
+          "玉门山地光伏电站-30",
+          0.0605
+        ],
+        [
+          "贺兰光伏发电厂-57",
+          0.0578
+        ],
+        [
+          "贺兰农光互补电站-32",
+          0.0551
+        ],
+        [
+          "东旭光伏发电厂-04",
+          0.0546
+        ],
+        [
+          "贺兰光伏电站-17",
+          0.0518
+        ]
+      ]
+    },
+    {
+      "id": 20,
+      "q": "过去 12 个月全国月度发电量趋势",
+      "type": "sql",
+      "sql": "SELECT strftime('%Y-%m', f.stat_date) AS month, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY 1 ORDER BY 1",
+      "expected_sql": "SELECT strftime('%Y-%m', stat_date) AS month, ROUND(SUM(generation_kwh),0) AS gen FROM fact_daily_generation WHERE stat_date >= date('2026-08-31', '-12 months') GROUP BY 1 ORDER BY 1",
+      "rows": [
+        [
+          "2025-08",
+          26213110.0
+        ],
+        [
+          "2025-09",
+          744702802.0
+        ],
+        [
+          "2025-10",
+          704577996.0
+        ],
+        [
+          "2025-11",
+          567728139.0
+        ],
+        [
+          "2025-12",
+          513730781.0
+        ],
+        [
+          "2026-01",
+          530886309.0
+        ],
+        [
+          "2026-02",
+          543319711.0
+        ],
+        [
+          "2026-03",
+          752714783.0
+        ],
+        [
+          "2026-04",
+          823675260.0
+        ],
+        [
+          "2026-05",
+          890996297.0
+        ],
+        [
+          "2026-06",
+          838209770.0
+        ],
+        [
+          "2026-07",
+          829493913.0
+        ],
+        [
+          "2026-08",
+          808993598.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "2025-08",
+          26213110.0
+        ],
+        [
+          "2025-09",
+          744702802.0
+        ],
+        [
+          "2025-10",
+          704577996.0
+        ],
+        [
+          "2025-11",
+          567728139.0
+        ],
+        [
+          "2025-12",
+          513730781.0
+        ],
+        [
+          "2026-01",
+          530886309.0
+        ],
+        [
+          "2026-02",
+          543319711.0
+        ],
+        [
+          "2026-03",
+          752714783.0
+        ],
+        [
+          "2026-04",
+          823675260.0
+        ],
+        [
+          "2026-05",
+          890996297.0
+        ],
+        [
+          "2026-06",
+          838209770.0
+        ],
+        [
+          "2026-07",
+          829493913.0
+        ],
+        [
+          "2026-08",
+          808993598.0
+        ]
+      ]
+    },
+    {
+      "id": 21,
+      "q": "近半年发电量最高的那个电站，按月的发电量变化",
+      "type": "sql",
+      "sql": "SELECT strftime('%Y-%m', f.stat_date) AS month, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-6 months') GROUP BY 1 ORDER BY 1",
+      "expected_sql": "SELECT strftime('%Y-%m', f.stat_date) AS month, ROUND(SUM(f.generation_kwh),0) AS gen FROM fact_daily_generation f WHERE f.stat_date >= date('2026-08-31', '-6 months') AND f.plant_id = (SELECT f2.plant_id FROM fact_daily_generation f2 WHERE f2.stat_date >= date('2026-08-31', '-6 months') GROUP BY f2.plant_id ORDER BY SUM(f2.generation_kwh) DESC LIMIT 1) GROUP BY 1 ORDER BY 1",
+      "rows": [
+        [
+          "2026-03",
+          703767197.0
+        ],
+        [
+          "2026-04",
+          823675260.0
+        ],
+        [
+          "2026-05",
+          890996297.0
+        ],
+        [
+          "2026-06",
+          838209770.0
+        ],
+        [
+          "2026-07",
+          829493913.0
+        ],
+        [
+          "2026-08",
+          808993598.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "2026-03",
+          57111375.0
+        ],
+        [
+          "2026-04",
+          72035296.0
+        ],
+        [
+          "2026-05",
+          73618855.0
+        ],
+        [
+          "2026-06",
+          73105157.0
+        ],
+        [
+          "2026-07",
+          73793991.0
+        ],
+        [
+          "2026-08",
+          71215646.0
+        ]
+      ]
+    },
+    {
+      "id": 22,
+      "q": "各季度发电量走势",
+      "type": "sql",
+      "sql": "SELECT strftime('%Y', f.stat_date) || '-Q' || ((CAST(strftime('%m', f.stat_date) AS INTEGER)+2)/3) AS quarter, ROUND(SUM(f.generation_kwh),0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id  GROUP BY 1 ORDER BY 1",
+      "expected_sql": "SELECT strftime('%Y', stat_date) || '-Q' || ((CAST(strftime('%m', stat_date) AS INTEGER)+2)/3) AS quarter, ROUND(SUM(generation_kwh),0) AS gen FROM fact_daily_generation GROUP BY 1 ORDER BY 1",
+      "rows": [
+        [
+          "2024-Q3",
+          746816912.0
+        ],
+        [
+          "2024-Q4",
+          1782691614.0
+        ],
+        [
+          "2025-Q1",
+          1830880163.0
+        ],
+        [
+          "2025-Q2",
+          2552990389.0
+        ],
+        [
+          "2025-Q3",
+          2381164366.0
+        ],
+        [
+          "2025-Q4",
+          1786036916.0
+        ],
+        [
+          "2026-Q1",
+          1826920803.0
+        ],
+        [
+          "2026-Q2",
+          2552881326.0
+        ],
+        [
+          "2026-Q3",
+          1638487511.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "2024-Q3",
+          746816912.0
+        ],
+        [
+          "2024-Q4",
+          1782691614.0
+        ],
+        [
+          "2025-Q1",
+          1830880163.0
+        ],
+        [
+          "2025-Q2",
+          2552990389.0
+        ],
+        [
+          "2025-Q3",
+          2381164366.0
+        ],
+        [
+          "2025-Q4",
+          1786036916.0
+        ],
+        [
+          "2026-Q1",
+          1826920803.0
+        ],
+        [
+          "2026-Q2",
+          2552881326.0
+        ],
+        [
+          "2026-Q3",
+          1638487511.0
+        ]
+      ]
+    },
+    {
+      "id": 23,
+      "q": "山东省下各电站的发电量分别是多少",
+      "type": "sql",
+      "sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh),2) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '山东' GROUP BY p.plant_id ORDER BY gen DESC LIMIT 200",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh), 0) AS gen FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '山东' GROUP BY p.plant_id ORDER BY gen DESC LIMIT 200",
+      "rows": [
+        [
+          "东旭渔光互补电站-50",
+          120479376.42
+        ],
+        [
+          "蓝星渔光互补电站-36",
+          114622540.61
+        ],
+        [
+          "恒源光伏电站-22",
+          109559808.03
+        ],
+        [
+          "河套光伏电站-08",
+          46509539.44
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "东旭渔光互补电站-50",
+          120479376.0
+        ],
+        [
+          "蓝星渔光互补电站-36",
+          114622541.0
+        ],
+        [
+          "恒源光伏电站-22",
+          109559808.0
+        ],
+        [
+          "河套光伏电站-08",
+          46509539.0
+        ]
+      ]
+    },
+    {
+      "id": 24,
+      "q": "使用阳光电源逆变器的电站平均转换效率",
+      "type": "sql",
+      "sql": "SELECT p.inverter_brand, ROUND(AVG(p.inverter_efficiency),4) AS avg_eff, COUNT(*) AS plant_cnt FROM dim_plant p WHERE p.inverter_brand = '阳光电源' GROUP BY 1 ORDER BY avg_eff DESC",
+      "expected_sql": "SELECT ROUND(AVG(inverter_efficiency), 4) AS avg_eff FROM dim_plant WHERE inverter_brand = '阳光电源'",
+      "rows": [
+        [
+          "阳光电源",
+          0.9688,
+          14
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "SHAPE",
+      "strict": false,
+      "loose": true,
+      "note": "预测多给 2 列（值对）",
+      "exp_rows": [
+        [
+          0.9688
+        ]
+      ]
+    },
+    {
+      "id": 25,
+      "q": "按设备类型统计各电站故障次数，取前 10",
+      "type": "sql",
+      "sql": "SELECT p.plant_name, d.device_type, COUNT(*) AS fault_cnt FROM fact_device_fault fl JOIN dim_device d ON d.device_id = fl.device_id JOIN dim_plant p ON p.plant_id = fl.plant_id GROUP BY 1, 2 ORDER BY fault_cnt DESC, p.plant_name, d.device_type LIMIT 10",
+      "expected_sql": "SELECT p.plant_name AS plant_name, d.device_type AS device_type, COUNT(*) AS fault_cnt FROM fact_device_fault fl JOIN dim_device d ON d.device_id = fl.device_id JOIN dim_plant p ON p.plant_id = fl.plant_id GROUP BY 1, 2 ORDER BY fault_cnt DESC, p.plant_name, d.device_type LIMIT 10",
+      "rows": [
+        [
+          "贺兰山地光伏电站-44",
+          "变压器",
+          22
+        ],
+        [
+          "恒源渔光互补电站-51",
+          "支架跟踪系统",
+          17
+        ],
+        [
+          "金辰山地光伏电站-13",
+          "逆变器",
+          17
+        ],
+        [
+          "广宇光伏电站-35",
+          "气象仪",
+          16
+        ],
+        [
+          "瑞泰渔光互补电站-20",
+          "变压器",
+          16
+        ],
+        [
+          "中环渔光互补电站-15",
+          "支架跟踪系统",
+          14
+        ],
+        [
+          "淮上农光互补电站-33",
+          "气象仪",
+          14
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          "变压器",
+          14
+        ],
+        [
+          "星耀渔光互补电站-40",
+          "支架跟踪系统",
+          13
+        ],
+        [
+          "玉门光伏电站-19",
+          "逆变器",
+          13
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "贺兰山地光伏电站-44",
+          "变压器",
+          22
+        ],
+        [
+          "恒源渔光互补电站-51",
+          "支架跟踪系统",
+          17
+        ],
+        [
+          "金辰山地光伏电站-13",
+          "逆变器",
+          17
+        ],
+        [
+          "广宇光伏电站-35",
+          "气象仪",
+          16
+        ],
+        [
+          "瑞泰渔光互补电站-20",
+          "变压器",
+          16
+        ],
+        [
+          "中环渔光互补电站-15",
+          "支架跟踪系统",
+          14
+        ],
+        [
+          "淮上农光互补电站-33",
+          "气象仪",
+          14
+        ],
+        [
+          "瀚海渔光互补电站-05",
+          "变压器",
+          14
+        ],
+        [
+          "星耀渔光互补电站-40",
+          "支架跟踪系统",
+          13
+        ],
+        [
+          "玉门光伏电站-19",
+          "逆变器",
+          13
+        ]
+      ]
+    },
+    {
+      "id": 26,
+      "q": "等效利用小时是怎么定义的",
+      "type": "glossary",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": false,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": 27,
+      "q": "弃光率的计算公式是什么",
+      "type": "glossary",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": false,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": 28,
+      "q": "单位装机发电量怎么算",
+      "type": "glossary",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": false,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": 29,
+      "q": "你能查哪些指标",
+      "type": "refuse",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": true,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": 30,
+      "q": "你的知识库数据到什么时候更新的",
+      "type": "refuse",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": true,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": 31,
+      "q": "美国的转换效率情况怎么样",
+      "type": "refuse",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": true,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    }
+  ]
+}
