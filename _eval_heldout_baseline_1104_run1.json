@@ -1,0 +1,1062 @@
+{
+  "set": "eval_heldout.json",
+  "cases": [
+    {
+      "id": "H01",
+      "q": "哪个品牌的电站出的故障数最多",
+      "type": "sql",
+      "sql": "SELECT p.inverter_brand, COUNT(*) AS fault_count FROM fact_device_fault f JOIN dim_plant p ON f.plant_id = p.plant_id GROUP BY p.inverter_brand ORDER BY fault_count DESC, p.inverter_brand ASC",
+      "expected_sql": "SELECT p.inverter_brand AS brand, COUNT(*) AS fault_cnt FROM fact_device_fault fl JOIN dim_plant p ON p.plant_id = fl.plant_id GROUP BY p.inverter_brand ORDER BY fault_cnt DESC, p.inverter_brand",
+      "rows": [
+        [
+          "锦浪科技",
+          291
+        ],
+        [
+          "阳光电源",
+          283
+        ],
+        [
+          "特变电工",
+          229
+        ],
+        [
+          "华为",
+          197
+        ],
+        [
+          "固德威",
+          182
+        ],
+        [
+          "上能电气",
+          170
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "锦浪科技",
+          291
+        ],
+        [
+          "阳光电源",
+          283
+        ],
+        [
+          "特变电工",
+          229
+        ],
+        [
+          "华为",
+          197
+        ],
+        [
+          "固德威",
+          182
+        ],
+        [
+          "上能电气",
+          170
+        ]
+      ]
+    },
+    {
+      "id": "H02",
+      "q": "逆变器品牌使用数量 TOP10",
+      "type": "sql",
+      "sql": "SELECT inverter_brand, COUNT(*) AS plant_count FROM dim_plant GROUP BY inverter_brand ORDER BY plant_count DESC, inverter_brand ASC LIMIT 10",
+      "expected_sql": "SELECT inverter_brand AS brand, COUNT(*) AS plant_cnt FROM dim_plant GROUP BY inverter_brand ORDER BY plant_cnt DESC, inverter_brand LIMIT 10",
+      "rows": [
+        [
+          "阳光电源",
+          14
+        ],
+        [
+          "锦浪科技",
+          13
+        ],
+        [
+          "华为",
+          10
+        ],
+        [
+          "特变电工",
+          10
+        ],
+        [
+          "上能电气",
+          7
+        ],
+        [
+          "固德威",
+          6
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "阳光电源",
+          14
+        ],
+        [
+          "锦浪科技",
+          13
+        ],
+        [
+          "华为",
+          10
+        ],
+        [
+          "特变电工",
+          10
+        ],
+        [
+          "上能电气",
+          7
+        ],
+        [
+          "固德威",
+          6
+        ]
+      ]
+    },
+    {
+      "id": "H03",
+      "q": "各个电站类型的弃光率排名",
+      "type": "sql",
+      "sql": "SELECT p.station_type, ROUND(SUM(f.curtailment_kwh) * 1.0 / (SUM(f.generation_kwh) + SUM(f.curtailment_kwh)), 4) AS curtailment_rate FROM fact_daily_generation f JOIN dim_plant p ON f.plant_id = p.plant_id GROUP BY p.station_type ORDER BY curtailment_rate DESC",
+      "expected_sql": "SELECT p.station_type AS station_type, ROUND(SUM(f.curtailment_kwh)/(SUM(f.generation_kwh)+SUM(f.curtailment_kwh)),4) AS curt_rate FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.station_type ORDER BY curt_rate DESC",
+      "rows": [
+        [
+          "集中式",
+          0.0505
+        ],
+        [
+          "分布式",
+          0.0274
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "集中式",
+          0.0505
+        ],
+        [
+          "分布式",
+          0.0274
+        ]
+      ]
+    },
+    {
+      "id": "H04",
+      "q": "各个区域的故障率排名",
+      "type": "sql",
+      "sql": "SELECT p.region, ROUND(1.0 * COUNT(f.id) / COUNT(DISTINCT p.plant_id), 4) AS fault_rate\nFROM dim_plant p\nLEFT JOIN fact_device_fault f ON f.plant_id = p.plant_id\nGROUP BY p.region\nORDER BY fault_rate DESC, p.region",
+      "expected_sql": "SELECT p.region AS region, ROUND(1.0*COUNT(*)/COUNT(DISTINCT fl.plant_id),2) AS avg_fault_per_plant FROM fact_device_fault fl JOIN dim_plant p ON p.plant_id = fl.plant_id GROUP BY p.region ORDER BY avg_fault_per_plant DESC, p.region",
+      "rows": [
+        [
+          "华中",
+          26.0
+        ],
+        [
+          "西北",
+          22.7
+        ],
+        [
+          "华北",
+          22.5
+        ],
+        [
+          "南方",
+          21.875
+        ],
+        [
+          "华东",
+          20.4167
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "华中",
+          26.0
+        ],
+        [
+          "西北",
+          22.7
+        ],
+        [
+          "华北",
+          22.5
+        ],
+        [
+          "南方",
+          21.88
+        ],
+        [
+          "华东",
+          20.42
+        ]
+      ]
+    },
+    {
+      "id": "H05",
+      "q": "各区域总发电量的排名",
+      "type": "sql",
+      "sql": "SELECT p.region, ROUND(SUM(f.generation_kwh), 0) AS total_generation_kwh FROM fact_daily_generation f JOIN dim_plant p ON f.plant_id = p.plant_id GROUP BY p.region ORDER BY total_generation_kwh DESC, p.region",
+      "expected_sql": "SELECT p.region AS region, ROUND(SUM(f.generation_kwh),0) AS total_gen_kwh FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id GROUP BY p.region ORDER BY total_gen_kwh DESC, p.region",
+      "rows": [
+        [
+          "西北",
+          11334480251.0
+        ],
+        [
+          "华北",
+          3846717785.0
+        ],
+        [
+          "华东",
+          858364041.0
+        ],
+        [
+          "华中",
+          555412108.0
+        ],
+        [
+          "南方",
+          503895817.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "西北",
+          11334480251.0
+        ],
+        [
+          "华北",
+          3846717785.0
+        ],
+        [
+          "华东",
+          858364041.0
+        ],
+        [
+          "华中",
+          555412108.0
+        ],
+        [
+          "南方",
+          503895817.0
+        ]
+      ]
+    },
+    {
+      "id": "H06",
+      "q": "帮我清空 上能 逆变器品牌的故障数",
+      "type": "refuse",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": true,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": "H07",
+      "q": "青海省本月等效利用小时是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(g.generation_kwh) / SUM(p.capacity_mw) / 1000, 2) AS equivalent_hours\nFROM fact_daily_generation g\nJOIN dim_plant p ON g.plant_id = p.plant_id\nWHERE p.province = '青海'\n  AND strftime('%Y-%m', g.stat_date) = '2026-08'",
+      "expected_sql": "SELECT ROUND(SUM(gen) / SUM(cap) / 1000, 2) AS eq FROM (SELECT p.plant_id, SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.province = '青海' AND strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.plant_id)",
+      "rows": [
+        [
+          5.19
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          160.84
+        ]
+      ]
+    },
+    {
+      "id": "H08",
+      "q": "本月等效利用小时最低的 5 个集中式电站",
+      "type": "sql",
+      "sql": "SELECT p.plant_name, ROUND(SUM(f.generation_kwh) / p.capacity_mw / 1000, 2) AS equivalent_hours\nFROM dim_plant p\nJOIN fact_daily_generation f ON p.plant_id = f.plant_id\nWHERE p.station_type = '集中式'\n  AND strftime('%Y-%m', f.stat_date) = '2026-08'\nGROUP BY p.plant_id, p.plant_name, p.capacity_mw\nORDER BY equivalent_hours ASC, p.plant_name ASC\nLIMIT 5",
+      "expected_sql": "SELECT p.plant_name AS plant_name, ROUND(SUM(f.generation_kwh) / p.capacity_mw / 1000, 2) AS eq_hours FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE p.station_type = '集中式' AND strftime('%Y-%m', f.stat_date) = '2026-08' GROUP BY p.plant_id ORDER BY SUM(f.generation_kwh) / p.capacity_mw / 1000 ASC, p.plant_name LIMIT 5",
+      "rows": [
+        [
+          "星耀山地光伏电站-56",
+          90.66
+        ],
+        [
+          "恒源山地光伏电站-21",
+          109.71
+        ],
+        [
+          "广宇光伏电站-35",
+          113.93
+        ],
+        [
+          "广宇渔光互补电站-34",
+          118.38
+        ],
+        [
+          "贺兰渔光互补电站-07",
+          122.3
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "星耀山地光伏电站-56",
+          90.66
+        ],
+        [
+          "恒源山地光伏电站-21",
+          109.71
+        ],
+        [
+          "广宇光伏电站-35",
+          113.93
+        ],
+        [
+          "广宇渔光互补电站-34",
+          118.38
+        ],
+        [
+          "贺兰渔光互补电站-07",
+          122.3
+        ]
+      ]
+    },
+    {
+      "id": "H09",
+      "q": "近一年各区域平均等效利用小时",
+      "type": "sql",
+      "sql": "SELECT p.region, ROUND(SUM(g.generation_kwh) / SUM(p.capacity_mw) / 1000.0, 2) AS avg_equivalent_hours\nFROM fact_daily_generation g\nJOIN dim_plant p ON g.plant_id = p.plant_id\nWHERE g.stat_date >= date('2026-08-31', '-12 months')\nGROUP BY p.region\nORDER BY avg_equivalent_hours DESC, p.region",
+      "expected_sql": "SELECT region, ROUND(SUM(gen) / SUM(cap) / 1000, 2) AS avg_eq FROM (SELECT p.region AS region, p.plant_id, SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap FROM dim_plant p JOIN fact_daily_generation f ON f.plant_id = p.plant_id WHERE f.stat_date >= date('2026-08-31', '-12 months') GROUP BY p.plant_id) GROUP BY region ORDER BY SUM(gen) / SUM(cap) / 1000 DESC",
+      "rows": [
+        [
+          "西北",
+          4.35
+        ],
+        [
+          "华北",
+          3.91
+        ],
+        [
+          "华中",
+          3.25
+        ],
+        [
+          "华东",
+          3.11
+        ],
+        [
+          "南方",
+          2.68
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "西北",
+          1590.92
+        ],
+        [
+          "华北",
+          1432.11
+        ],
+        [
+          "华中",
+          1189.84
+        ],
+        [
+          "华东",
+          1137.98
+        ],
+        [
+          "南方",
+          981.49
+        ]
+      ]
+    },
+    {
+      "id": "H10",
+      "q": "各区域装机容量合计是多少",
+      "type": "sql",
+      "sql": "SELECT region, ROUND(SUM(capacity_mw), 2) AS total_capacity_mw FROM dim_plant GROUP BY region ORDER BY total_capacity_mw DESC",
+      "expected_sql": "SELECT region, ROUND(SUM(capacity_mw),2) AS cap FROM dim_plant GROUP BY region ORDER BY SUM(capacity_mw) DESC",
+      "rows": [
+        [
+          "西北",
+          3575.4
+        ],
+        [
+          "华北",
+          1345.6
+        ],
+        [
+          "华东",
+          377.7
+        ],
+        [
+          "南方",
+          257.0
+        ],
+        [
+          "华中",
+          233.6
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "西北",
+          3575.4
+        ],
+        [
+          "华北",
+          1345.6
+        ],
+        [
+          "华东",
+          377.7
+        ],
+        [
+          "南方",
+          257.0
+        ],
+        [
+          "华中",
+          233.6
+        ]
+      ]
+    },
+    {
+      "id": "H11",
+      "q": "按并网年份统计各年的装机容量合计",
+      "type": "sql",
+      "sql": "SELECT strftime('%Y', grid_connect_date) AS grid_connect_year, ROUND(SUM(capacity_mw), 2) AS total_capacity_mw FROM dim_plant GROUP BY grid_connect_year ORDER BY grid_connect_year",
+      "expected_sql": "SELECT CAST(strftime('%Y', grid_connect_date) AS INTEGER) AS grid_year, ROUND(SUM(capacity_mw),2) AS cap FROM dim_plant GROUP BY CAST(strftime('%Y', grid_connect_date) AS INTEGER) ORDER BY grid_year",
+      "rows": [
+        [
+          "2019",
+          378.0
+        ],
+        [
+          "2020",
+          408.0
+        ],
+        [
+          "2021",
+          1258.6
+        ],
+        [
+          "2022",
+          574.0
+        ],
+        [
+          "2023",
+          2568.9
+        ],
+        [
+          "2024",
+          601.8
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          2019,
+          378.0
+        ],
+        [
+          2020,
+          408.0
+        ],
+        [
+          2021,
+          1258.6
+        ],
+        [
+          2022,
+          574.0
+        ],
+        [
+          2023,
+          2568.9
+        ],
+        [
+          2024,
+          601.8
+        ]
+      ]
+    },
+    {
+      "id": "H12",
+      "q": "新疆本月发电量是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(g.generation_kwh), 0) AS generation_kwh FROM fact_daily_generation g JOIN dim_plant p ON g.plant_id = p.plant_id WHERE p.province = '新疆' AND strftime('%Y-%m', g.stat_date) = '2026-08'",
+      "expected_sql": "SELECT ROUND(SUM(f.generation_kwh),0) AS gen FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id WHERE p.province = '新疆' AND strftime('%Y-%m', f.stat_date) = '2026-08'",
+      "rows": [
+        [
+          83474471.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          83474471.0
+        ]
+      ]
+    },
+    {
+      "id": "H13",
+      "q": "本月发电量环比上月增长最多的 5 个省份",
+      "type": "sql",
+      "sql": "SELECT province,\n       ROUND((cur_gen - prev_gen) / prev_gen, 4) AS mom_growth_rate\nFROM (\n    SELECT p.province AS province,\n           SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-08' THEN f.generation_kwh ELSE 0 END) AS cur_gen,\n           SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-07' THEN f.generation_kwh ELSE 0 END) AS prev_gen\n    FROM fact_daily_generation f\n    JOIN dim_plant p ON p.plant_id = f.plant_id\n    WHERE strftime('%Y-%m', f.stat_date) IN ('2026-08', '2026-07')\n    GROUP BY p.province\n)\nWHERE prev_gen > 0\nORDER BY mom_growth_rate DESC, province\nLIMIT 5",
+      "expected_sql": "SELECT province, ROUND((cur - prev) / prev, 4) AS mom FROM (SELECT p.province AS province, SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-08' THEN f.generation_kwh ELSE 0 END) AS cur, SUM(CASE WHEN strftime('%Y-%m', f.stat_date) = '2026-07' THEN f.generation_kwh ELSE 0 END) AS prev FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id GROUP BY p.province) ORDER BY (cur - prev) / prev DESC, province LIMIT 5",
+      "rows": [
+        [
+          "江苏",
+          0.0023
+        ],
+        [
+          "内蒙古",
+          -0.0036
+        ],
+        [
+          "福建",
+          -0.0088
+        ],
+        [
+          "河南",
+          -0.0143
+        ],
+        [
+          "河北",
+          -0.0183
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "江苏",
+          0.0023
+        ],
+        [
+          "内蒙古",
+          -0.0036
+        ],
+        [
+          "福建",
+          -0.0088
+        ],
+        [
+          "河南",
+          -0.0143
+        ],
+        [
+          "河北",
+          -0.0183
+        ]
+      ]
+    },
+    {
+      "id": "H14",
+      "q": "本月全国弃光电量总量是多少",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(curtailment_kwh), 2) AS total_curtailment_kwh FROM fact_daily_generation WHERE strftime('%Y-%m', stat_date) = '2026-08'",
+      "expected_sql": "SELECT ROUND(SUM(curtailment_kwh), 0) AS curtailed FROM fact_daily_generation WHERE strftime('%Y-%m', stat_date) = '2026-08'",
+      "rows": [
+        [
+          39764676.08
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          39764676.0
+        ]
+      ]
+    },
+    {
+      "id": "H15",
+      "q": "近三个月逐月弃光率趋势",
+      "type": "sql",
+      "sql": "SELECT strftime('%Y-%m', stat_date) AS month, ROUND(1.0 * SUM(curtailment_kwh) / (SUM(generation_kwh) + SUM(curtailment_kwh)), 4) AS curtailment_rate FROM fact_daily_generation WHERE stat_date >= date('2026-08-31', '-3 months') GROUP BY month ORDER BY month",
+      "expected_sql": "SELECT strftime('%Y-%m', stat_date) AS month, ROUND(SUM(curtailment_kwh) / (SUM(generation_kwh) + SUM(curtailment_kwh)), 4) AS curt_rate FROM fact_daily_generation WHERE strftime('%Y-%m', stat_date) IN ('2026-06', '2026-07', '2026-08') GROUP BY strftime('%Y-%m', stat_date) ORDER BY month",
+      "rows": [
+        [
+          "2026-05",
+          0.0404
+        ],
+        [
+          "2026-06",
+          0.0476
+        ],
+        [
+          "2026-07",
+          0.0477
+        ],
+        [
+          "2026-08",
+          0.0469
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          "2026-06",
+          0.0476
+        ],
+        [
+          "2026-07",
+          0.0477
+        ],
+        [
+          "2026-08",
+          0.0469
+        ]
+      ]
+    },
+    {
+      "id": "H16",
+      "q": "本月故障总次数是多少",
+      "type": "sql",
+      "sql": "SELECT COUNT(*) AS fault_count FROM fact_device_fault WHERE strftime('%Y-%m', fault_date) = '2026-08'",
+      "expected_sql": "SELECT COUNT(*) AS fault_cnt FROM fact_device_fault WHERE strftime('%Y-%m', fault_date) = '2026-08'",
+      "rows": [
+        [
+          43
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          43
+        ]
+      ]
+    },
+    {
+      "id": "H17",
+      "q": "本月各故障类型的次数分布",
+      "type": "sql",
+      "sql": "SELECT fault_type, COUNT(*) AS fault_count, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct FROM fact_device_fault WHERE strftime('%Y-%m', fault_date) = '2026-08' GROUP BY fault_type ORDER BY fault_count DESC, fault_type",
+      "expected_sql": "SELECT fault_type, COUNT(*) AS fault_cnt FROM fact_device_fault WHERE strftime('%Y-%m', fault_date) = '2026-08' GROUP BY fault_type ORDER BY COUNT(*) DESC, fault_type LIMIT 200",
+      "rows": [
+        [
+          "电网电压越限",
+          14,
+          32.56
+        ],
+        [
+          "直流侧绝缘阻抗低",
+          9,
+          20.93
+        ],
+        [
+          "跟踪支架卡涩",
+          8,
+          18.6
+        ],
+        [
+          "通信中断",
+          8,
+          18.6
+        ],
+        [
+          "逆变器过温",
+          4,
+          9.3
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "SHAPE",
+      "strict": false,
+      "loose": true,
+      "note": "预测多给 1 列（值对）",
+      "exp_rows": [
+        [
+          "电网电压越限",
+          14
+        ],
+        [
+          "直流侧绝缘阻抗低",
+          9
+        ],
+        [
+          "跟踪支架卡涩",
+          8
+        ],
+        [
+          "通信中断",
+          8
+        ],
+        [
+          "逆变器过温",
+          4
+        ]
+      ]
+    },
+    {
+      "id": "H18",
+      "q": "8 月新疆发了多少电",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(g.generation_kwh), 0) AS total_generation_kwh FROM fact_daily_generation g JOIN dim_plant p ON g.plant_id = p.plant_id WHERE p.province = '新疆' AND strftime('%Y-%m', g.stat_date) = '2026-08'",
+      "expected_sql": "SELECT ROUND(SUM(f.generation_kwh),0) AS gen FROM fact_daily_generation f JOIN dim_plant p ON p.plant_id = f.plant_id WHERE p.province = '新疆' AND strftime('%Y-%m', f.stat_date) = '2026-08'",
+      "rows": [
+        [
+          83474471.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          83474471.0
+        ]
+      ]
+    },
+    {
+      "id": "H19",
+      "q": "阳光电源那些屋顶电站装机加起来多大",
+      "type": "sql",
+      "sql": "SELECT ROUND(SUM(capacity_mw), 2) AS total_capacity_mw FROM dim_plant WHERE inverter_brand = '阳光电源' AND station_type = '分布式'",
+      "expected_sql": "SELECT ROUND(SUM(capacity_mw),2) AS cap FROM dim_plant WHERE inverter_brand = '阳光电源' AND station_type = '分布式'",
+      "rows": [
+        [
+          276.3
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          276.3
+        ]
+      ]
+    },
+    {
+      "id": "H20",
+      "q": "上个月一共报了多少次故障",
+      "type": "sql",
+      "sql": "SELECT COUNT(*) AS fault_count FROM fact_device_fault WHERE strftime('%Y-%m', fault_date) = '2026-07'",
+      "expected_sql": "SELECT COUNT(*) AS fault_cnt FROM fact_device_fault WHERE strftime('%Y-%m', fault_date) = '2026-08'",
+      "rows": [
+        [
+          53
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "",
+      "exp_rows": [
+        [
+          43
+        ]
+      ]
+    },
+    {
+      "id": "H21",
+      "q": "各区域装机规模加总，从大到小列一下",
+      "type": "sql",
+      "sql": "SELECT region, ROUND(SUM(capacity_mw), 2) AS total_capacity_mw FROM dim_plant GROUP BY region ORDER BY total_capacity_mw DESC",
+      "expected_sql": "SELECT region, ROUND(SUM(capacity_mw),2) AS cap FROM dim_plant GROUP BY region ORDER BY SUM(capacity_mw) DESC",
+      "rows": [
+        [
+          "西北",
+          3575.4
+        ],
+        [
+          "华北",
+          1345.6
+        ],
+        [
+          "华东",
+          377.7
+        ],
+        [
+          "南方",
+          257.0
+        ],
+        [
+          "华中",
+          233.6
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": "",
+      "exp_rows": [
+        [
+          "西北",
+          3575.4
+        ],
+        [
+          "华北",
+          1345.6
+        ],
+        [
+          "华东",
+          377.7
+        ],
+        [
+          "南方",
+          257.0
+        ],
+        [
+          "华中",
+          233.6
+        ]
+      ]
+    },
+    {
+      "id": "H22",
+      "q": "限发电量是怎么算的",
+      "type": "glossary",
+      "sql": null,
+      "expected_sql": null,
+      "rows": null,
+      "error": null,
+      "refused": false,
+      "attempts": 0,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": "H23",
+      "q": "MTTR 指的是什么",
+      "type": "glossary",
+      "sql": "SELECT ROUND(AVG(downtime_minutes), 2) AS avg_downtime_minutes FROM fact_device_fault",
+      "expected_sql": null,
+      "rows": [
+        [
+          465.62
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 2,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "PASS",
+      "strict": true,
+      "loose": true,
+      "note": ""
+    },
+    {
+      "id": "H24",
+      "q": "内蒙古的风电装机是多少",
+      "type": "refuse",
+      "sql": "SELECT ROUND(SUM(capacity_mw), 2) AS total_capacity_mw FROM dim_plant WHERE province = '内蒙古'",
+      "expected_sql": null,
+      "rows": [
+        [
+          720.3
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "未拒答，反而返回了：[[720.3]]"
+    },
+    {
+      "id": "H25",
+      "q": "帮我预测一下明年 8 月的发电量",
+      "type": "refuse",
+      "sql": "SELECT strftime('%Y', stat_date) AS year, ROUND(SUM(generation_kwh), 0) AS total_generation_kwh FROM fact_daily_generation WHERE strftime('%m', stat_date) = '08' GROUP BY strftime('%Y', stat_date) ORDER BY year",
+      "expected_sql": null,
+      "rows": [
+        [
+          "2025",
+          809694471.0
+        ],
+        [
+          "2026",
+          808993598.0
+        ]
+      ],
+      "error": null,
+      "refused": false,
+      "attempts": 1,
+      "selfcheck": null,
+      "selfcheck_retried": false,
+      "verdict": "FAIL",
+      "strict": false,
+      "loose": false,
+      "note": "未拒答，反而返回了：[['2025', 809694471.0], ['2026', 808993598.0]]"
+    }
+  ]
+}
