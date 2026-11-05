@@ -2,3 +2,7 @@ fastapi
 uvicorn
 openai
 python-dotenv
+psycopg[binary]
+pgvector
+numpy
+sentence-transformers
