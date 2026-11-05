@@ -913,10 +913,11 @@ def fewshot_block() -> str:
 
 
 def llm_generate_sql(question: str, tables: list[str], metrics: list[dict], error_hint: str = "") -> str:
-    """真模型模式：DeepSeek / OpenAI 兼容接口"""
-    from openai import OpenAI  # 延迟导入：MOCK 模式下不需要装 SDK
+    """真模型模式：DeepSeek / OpenAI 兼容接口。
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
+    D4 开关：CHATBI_USE_GATEWAY=1 时改走模型网关（重试/降级/观测）。
+    默认不设 = 原来的裸调，字节级不变，便于开关前后做等价性回归。
+    """
     glossary = "\n".join(
         f"- {m['metric_name']}：{m['definition']} 口径={m['formula']}" for m in metrics
     ) or "- 未命中业务口径，按表结构推断"
@@ -927,12 +928,22 @@ def llm_generate_sql(question: str, tables: list[str], metrics: list[dict], erro
         f"\n{fewshot_block()}"
         f"\n请输出 SQL：{_anchor_hint()}"
     )
-    resp = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "deepseek-chat"),
-        messages=[{"role": "system", "content": llm_system_prompt()}, {"role": "user", "content": user}],
-        temperature=0,
-    )
-    sql = resp.choices[0].message.content.strip()
+    msg_list = [
+        {"role": "system", "content": llm_system_prompt()},
+        {"role": "user", "content": user},
+    ]
+    if os.getenv("CHATBI_USE_GATEWAY") == "1":
+        from llm_gateway import chat  # 延迟导入：默认路径不需要装网关
+        sql = (chat(msg_list, tag="text2sql") or "").strip()
+    else:
+        from openai import OpenAI  # 延迟导入：MOCK 模式下不需要装 SDK
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
+        resp = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "deepseek-chat"),
+            messages=msg_list,
+            temperature=0,
+        )
+        sql = (resp.choices[0].message.content or "").strip()
     sql = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", sql)
     return sql.strip().rstrip(";")
 
