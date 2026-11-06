@@ -13,6 +13,13 @@ B 选项 bge-small-zh 本地方案未选，理由见 D6 验收报告）。换模
 
 维度契约：灌库与查询必须同为 DIM（1024）。pgvector 对维度不一致直接报错，
 宁可炸在写入口，也不让检索层静默变差。
+
+超时契约（2026-11-06 下午补，D6 验收后实踩）：必须显式设 timeout（默认 5s）——
+OpenAI SDK 不传 timeout 时默认等 10 分钟，而降级逻辑靠「异常触发」：
+hang 住不抛异常 = 降级永远不触发 = 整个问数链路被增强层拖死。
+当天实踩：Docker daemon 半死时 PG 连接挂住，retrieve_metrics 卡 60s+。
+降级设计要覆盖三种失败：报错（except 接住）、超时（timeout 抛异常再被 except 接住）、
+慢而不死（超时上限兜住）。只处理第一种不叫降级，叫侥幸。
 """
 import functools
 import os
@@ -47,6 +54,7 @@ def _client():
     return OpenAI(
         api_key=key,
         base_url=os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+        timeout=float(os.getenv("EMBED_TIMEOUT_S", "5")),
     )
 
 

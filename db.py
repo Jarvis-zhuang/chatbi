@@ -41,6 +41,11 @@ PG_CONN_KWARGS = dict(
     user=os.environ.get("CHATBI_PG_USER", "chatbi_ro"),
     password=os.environ.get("CHATBI_PG_PASSWORD", "chatbi_ro"),
     options="-c statement_timeout=5000",
+    # connect_timeout：连接【建立】的上限（秒），与 statement_timeout（执行上限）是两回事。
+    # 2026-11-06 实踩：Docker daemon 半死时端口 listening 但不响应，psycopg 默认
+    # 连接等待极长——statement_timeout 管不到还没建立的连接。没有它，
+    # retrieve_metrics 的「挂了就降级」形同虚设：降级靠异常触发，hang 不抛异常。
+    connect_timeout=3,
 )
 PG_DSN = os.environ.get("CHATBI_PG_DSN")  # 整串覆盖口子（连 Neon/Supabase 时用）
 
