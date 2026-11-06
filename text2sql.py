@@ -37,9 +37,10 @@ import datetime
 import json
 import os
 import re
+import sys
 from typing import Iterator
 
-from db import execute_sql, connect_readonly, DIALECT
+from db import execute_sql, connect_readonly, DIALECT, USE_PG
 
 # ============================================================ 配置
 MAX_RETRY = 2           # 考点 4：自修正硬上限，防 Agent 死循环
@@ -375,22 +376,66 @@ def render_schema(tables: list[str]) -> str:
 
 
 # ============================================================ 第 2 站：业务口径检索（RAG）
+def _retrieve_by_vector(question: str, limit: int) -> list:
+    """语义路（PG 专用）：问题向量化 → pgvector 余弦距离排序，返回按相似度排的 metric_id。
+
+    任何失败返回 []（降级信号）——检索是【增强层】不是正确性依赖：向量路挂了
+    还有关键词路兜底，链路退回 D5 之前的行为。但降级不静默：stderr 留痕
+    （评测日志可见）。这是「静默降级是病」（Q2 考点）在增强层的正面应用：
+    护栏层降级伤用户、必须显式；增强层降级不伤正确性、但要可观测。
+    """
+    if not USE_PG:
+        return []  # SQLite 无向量列；MOCK 冒烟也会因无 embedding key 在下面短路（零成本）
+    if os.getenv("CHATBI_VECTOR_LANE", "1") != "1":
+        return []  # 对照实验开关：关掉 = 退回纯关键词路（D5 行为），用于控单一变量定位回归
+    try:
+        from embed_client import embed_query_cached, is_enabled  # 延迟导入：SQLite 零新依赖
+
+        if not is_enabled():
+            return []
+        qvec = embed_query_cached(question)
+        conn = connect_readonly()
+        try:
+            rows = conn.execute(
+                "SELECT metric_id FROM metric_glossary WHERE embedding IS NOT NULL "
+                "ORDER BY embedding <=> %s LIMIT %s",
+                (qvec, limit),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [r["metric_id"] for r in rows]
+    except Exception as e:  # noqa: BLE001  降级路径要接住一切（网络/维度/列缺失）
+        print(f"[retrieve_metrics] vector lane degraded: {e}", file=sys.stderr)
+        return []
+
+
 def retrieve_metrics(question: str, limit: int = 3) -> list[dict]:
     """
-    考点 5：RAG 在 ChatBI 里真正的用武之地不是文档问答，而是「业务口径检索」。
-    「发电效率」「等效利用小时」这些指标定义必须先检索出来，SQL 才可能算对。
-    D5 会把这一层换成 pgvector 真向量召回 + Postgres 全文检索双路 RRF，
-    现在先用关键词 + 别名匹配把链路跑通（可替换点，不改上层逻辑）。
+    考点 5/10：业务口径检索——RAG 在 ChatBI 里真正的用武之地不是文档问答，
+    而是「发电效率」「等效利用小时」这些指标定义必须先检索出来，SQL 才可能算对。
+
+    D6 起双路 + RRF 合并（上层接口与返回字段不变，调用方零改动）：
+      路1 语义（PG only）：pgvector 余弦距离。「电站发电量排名」能召回「发电量」口径，
+          靠语义不靠字面重合；问题向量化走 embed_client 单一事实源（灌库/查询同模型，
+          防向量空间错配），lru_cache 保证同题链路两次检索只向量化一次。
+      路2 关键词（跨库通用）：指标名/别名精确命中——问法直呼其名时又快又准；
+          SQLite 兜底档没有向量列，全靠它。
+    合并用 RRF（Reciprocal Rank Fusion）：score = Σ 1/(60+rank)。只排名次、不看原始分——
+    两路分数量纲不同（余弦距离 vs 关键词打分）没法直接相加，RRF 天然免归一化。
+    26 行小表不建 HNSW 索引（见 seed_embeddings_pg.py 的设计决策注释）。
     """
     conn = connect_readonly()
     try:
         rows = conn.execute(
-            "SELECT metric_name, aliases, definition, formula, unit, source_doc FROM metric_glossary"
+            "SELECT metric_id, metric_name, aliases, definition, formula, unit, source_doc "
+            "FROM metric_glossary"
         ).fetchall()
     finally:
         conn.close()
+    by_id = {r["metric_id"]: r for r in rows}
 
-    scored = []
+    # —— 路2 关键词（D1 逻辑原样保留：既是 RRF 第二票，也是 SQLite/MOCK 唯一路）
+    kw_ranked = []
     for r in rows:
         score = 0
         if r["metric_name"] in question:
@@ -404,9 +449,20 @@ def retrieve_metrics(question: str, limit: int = 3) -> list[dict]:
         if score and re.search(r"(怎么|如何|什么是|计算公式|定义|口径|怎么算|什么意思)", question):
             score += 2
         if score:
-            scored.append((score, dict(r)))
-    scored.sort(key=lambda x: -x[0])
-    return [s[1] for s in scored[:limit]]
+            kw_ranked.append((score, r["metric_id"]))
+    kw_ranked.sort(key=lambda x: -x[0])
+
+    # —— 路1 语义 + RRF：两路各取前 limit*2 参与，票权 1/(60+名次)
+    K = 60
+    rrf = {}
+    for rank, mid in enumerate(_retrieve_by_vector(question, limit * 2), start=1):
+        rrf[mid] = rrf.get(mid, 0.0) + 1.0 / (K + rank)
+    for rank, (_, mid) in enumerate(kw_ranked[: limit * 2], start=1):
+        rrf[mid] = rrf.get(mid, 0.0) + 1.0 / (K + rank)
+    if not rrf:
+        return []
+    ordered = sorted(rrf.items(), key=lambda x: -x[1])[:limit]
+    return [by_id[mid] for mid, _ in ordered if mid in by_id]
 
 
 # ============================================================ 第 3 站：生成 SQL
