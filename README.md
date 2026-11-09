@@ -226,26 +226,22 @@ cd D:\code\ai\chatbi
 手动步骤（账号注册只能本人做）：
 
 1. **Neon 建库**（neon.tech 免费档）：建 project → 复制连接串（形如 `postgresql://...ep-xxx.neon.tech/neondb?sslmode=require`）
-2. **灌库**（本机跑，连云库）：
+2. **灌库**：本机没有 psql 客户端 → 用一键脚本（psycopg 替代执行，含自证：表数/向量覆盖/chatbi_ro INSERT 被拒实测）：
 
    ```powershell
-   # ① Neon 默认库名是 neondb，而 pg_schema/readonly 脚本硬编码 chatbi → 先建同名库
+   # ① Neon 默认库名是 neondb，脚本会自动 CREATE DATABASE chatbi 并切换库名段
    $env:CHATBI_ADMIN_DSN = "postgresql://...neon.tech/neondb?sslmode=require"
-   psql $env:CHATBI_ADMIN_DSN -c "CREATE DATABASE chatbi;"
-   # ② 以下全部用 chatbi 库的连接串（URL 尾部 /neondb 改成 /chatbi）
-   $env:CHATBI_ADMIN_DSN = "postgresql://...neon.tech/chatbi?sslmode=require"
-   psql $env:CHATBI_ADMIN_DSN -f pg_schema.sql         # 建表 + CREATE EXTENSION vector（脚本内含，不用单独建）
-   .\.venv\Scripts\python.exe seed_data_pg.py          # CHATBI_ADMIN_DSN 覆盖默认本机 DSN
-   .\.venv\Scripts\python.exe seed_embeddings_pg.py    # 灌 26 条口径向量（需要智谱 key）
-   psql $env:CHATBI_ADMIN_DSN -f pg_readonly_setup.sql # 建只读账号
+   # ② 只读账号密码必须显式设置（≥12 位，公网可直连 Neon，脚本拒绝弱密码）
+   $env:CHATBI_RO_PASSWORD = "<强密码>"
+   .\.venv\Scripts\python.exe _deploy_neon.py
+   # 脚本顺序：建库 → pg_schema（含 CREATE EXTENSION vector）→ seed_data_pg → seed_embeddings_pg（智谱 key 从 .env 读）
+   #          → pg_readonly_setup（密码执行前替换，明文不落盘）→ 自证
    ```
-
-   ⚠️ 云上跑 `pg_readonly_setup.sql` 前把 `chatbi_ro` 的固定密码改强（公网可直连 Neon，弱密码不合适），Render 侧 `CHATBI_PG_DSN` 同步用新密码。
 
 3. **Render 建 Web Service**（render.com）：连 GitHub 仓库 → Runtime 选 Python
    - Build: `pip install -r requirements-deploy.txt`
    - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - 环境变量：`CHATBI_PG_DSN`（第 1 步的连接串，但 user 换成 chatbi_ro）、`USE_PG=1`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY`、`CHATBI_ACCESS_CODE`
+   - 环境变量：`CHATBI_PG_DSN`（`_deploy_neon.py` 跑完末尾会打印现成的，直接抄）、`USE_PG=1`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY`、`CHATBI_ACCESS_CODE`
 4. **验收**：手机开 Render 分配的 `https://xxx.onrender.com` → 输访问码 → 问「各省份装机容量排名」
 
 已知代价：免费实例 15 分钟无访问休眠，冷启动约 50 秒（面试演示前先戳一下唤醒）；Neon 免费 compute 同样会自动 suspend，首查慢几秒属正常。
