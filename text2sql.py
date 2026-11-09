@@ -1250,7 +1250,8 @@ def ask(question: str) -> dict:
     out = {"question": question, "sql": None, "ok": False, "refused": False, "attempts": 0,
            "error": None, "columns": None, "rows": None, "answer": None, "readonly_notice": None,
            "row_cap_applied": False,
-           "selfcheck": None, "selfcheck_retried": False}
+           "selfcheck": None, "selfcheck_retried": False,
+           "tables": None}
 
     # 护栏：注入 / 负样本拒答优先于任何 SQL 生成（流式、非流式两条都用同一套判定）
     if is_injection_attempt(question):
@@ -1269,9 +1270,12 @@ def ask(question: str) -> dict:
         return out
     error_hint = ""
     selfcheck_used = 0
+    # 选表是确定性的，重试轮不会变 → 循环外算一次，写进 out 供 eval dump 观测选表质量
+    tables = select_tables(question)
+    out["tables"] = tables
     # 预算：执行报错重试 MAX_RETRY 次 + 自检重试最多 SELFCHECK_MAX 次，合计就是硬上限
     for attempt in range(MAX_RETRY + 1 + SELFCHECK_MAX):
-        sql = llm_generate_sql(question, select_tables(question), metrics, error_hint) if USE_LLM \
+        sql = llm_generate_sql(question, tables, metrics, error_hint) if USE_LLM \
             else mock_generate_sql(question)
         out["sql"] = sql
         out["attempts"] = attempt + 1
