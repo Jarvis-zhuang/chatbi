@@ -15,3 +15,4 @@ _eval_*.txt
 _eval_base.json
 _eval_*.json
 _gw_*
+_deploy_neon_ro_password.txt

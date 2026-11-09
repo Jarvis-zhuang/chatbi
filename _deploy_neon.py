@@ -36,20 +36,60 @@ def die(msg: str):
 
 def to_chatbi_dsn(dsn: str) -> str:
     """把 .../neondb?params 的库名段替换成 chatbi（psycopg 只认单库连接）。"""
-    head, sep_tail = dsn.rpartition("/")
-    db_part = sep_tail.split("?", 1)
+    head, _, tail = dsn.rpartition("/")
+    db_part = tail.split("?", 1)
     print(f"[deploy] 库名 {db_part[0]!r} → 'chatbi'")
     return head + "/chatbi" + (("?" + db_part[1]) if len(db_part) > 1 else "")
 
 
+def split_statements(sql: str) -> list:
+    """按分号切分 SQL 语句，感知 $$ dollar-quote 区域（内部分号不切）。
+    逐条执行的根因：psycopg3 所有 cursor 都走扩展协议，一次只收单条语句，
+    整文件下发必报 syntax error —— psql 能整跑是因为它有自己的解析器。"""
+    stmts, buf, in_dq = [], [], False
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if not in_dq:
+            if not stripped:
+                continue
+            if stripped.startswith("\\"):
+                continue
+            if stripped.endswith("\\gexec"):
+                buf = []  # \gexec 是该语句的结束方式：丢弃不执行（建库由脚本自行完成）
+                continue
+            if stripped.startswith("--"):
+                continue
+        i, stmt_ended = 0, False
+        while i < len(line):
+            if not in_dq and line[i:i + 2] == "--":
+                break  # 行内注释，忽略余下
+            if line[i:i + 2] == "$$":
+                in_dq = not in_dq
+                buf.append("$$")
+                i += 2
+                continue
+            buf.append(line[i])
+            if line[i] == ";" and not in_dq:
+                stmt_ended = True
+            i += 1
+        if stmt_ended:
+            s = "".join(buf).strip()
+            if s:
+                stmts.append(s)
+            buf = []
+    tail = "".join(buf).strip()
+    if tail:
+        stmts.append(tail)
+    return stmts
+
+
 def run_sql_file(conn, path: str):
-    """执行 .sql 文件：过滤 psql 元命令行（\\c、\\set），整串下发（支持 DO $$）。"""
+    """执行 .sql 文件：跳过 psql 元命令，按 $$ 感知切分后逐条执行。"""
     with open(path, encoding="utf-8") as f:
-        lines = [ln for ln in f.read().splitlines()
-                 if ln.lstrip() and not ln.lstrip().startswith("\\")]
-    sql = "\n".join(lines)
-    conn.execute(sql)
-    print(f"[deploy] ✅ {os.path.basename(path)}")
+        stmts = split_statements(f.read())
+    for i, s in enumerate(stmts, 1):
+        conn.execute(s)
+    print(f"[deploy] ✅ {os.path.basename(path)}（{len(stmts)} 条语句）")
 
 
 def main():
@@ -83,10 +123,9 @@ def main():
     ro_sql_path = os.path.join(BASE_DIR, "pg_readonly_setup.sql")
     with open(ro_sql_path, encoding="utf-8") as f:
         ro_sql = f.read().replace("PASSWORD 'chatbi_ro'", f"PASSWORD '{RO_PASSWORD}'")
-    ro_lines = [ln for ln in ro_sql.splitlines()
-                if ln.lstrip() and not ln.lstrip().startswith("\\")]
     with psycopg.connect(chatbi_dsn, autocommit=True) as conn:
-        conn.execute("\n".join(ro_lines))
+        for s in split_statements(ro_sql):
+            conn.execute(s)
     print("[deploy] ✅ pg_readonly_setup.sql（密码已替换，未落盘明文）")
 
     # 5. 自证
