@@ -383,6 +383,7 @@ def main():
         rec = {"id": c["id"], "q": q, "type": typ, "sql": out.get("sql"),
                "expected_sql": c.get("sql"), "rows": out.get("rows"),
                "error": out.get("error"), "refused": out.get("refused"),
+               "tables": out.get("tables"),
                # 重试证据：attempts = 这一题总共生成了几次 SQL；selfcheck = 自检说了什么；
                # selfcheck_retried = 是否真的走了一次自检重试（与「探针判定本来就没有、未重试」区分开）
                "attempts": out.get("attempts"), "selfcheck": out.get("selfcheck"),
