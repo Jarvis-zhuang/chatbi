@@ -215,6 +215,42 @@ cd D:\code\ai\chatbi
 浏览器打开 <http://localhost:8000>，输入「各省份装机容量排名」，会看到 4 个步骤实时推出来。  
 右上角显示 `MOCK 模式` 时不用花一分钱，规则引擎兜底，链路完整。
 
+## 部署上云：Render + Neon（2026-11-09 · D7，目标：手机打开在线链接）
+
+方案拍板（2026-11-09）：**A. Render 免费 Web Service + Neon 免费 PG**，弃 HF Spaces（hf.space 国内经常打不开，HR 手机演示失败=白做）。全部简历卖点保留：真 PG + pgvector + `chatbi_ro` 只读账号（Neon 允许 `CREATE ROLE`，方案 A 平移不用降级 `SET TRANSACTION READ ONLY`）。
+
+**部署版依赖**：`requirements-deploy.txt`（5 个包）刻意与本地 `requirements.txt` 不同——剔除 `sentence-transformers`（本地方案残留，主链路零引用，embedding 走智谱 API）、`numpy` 与 `pgvector` python 包（向量链路全程用 pgvector 文本字面量 `'[0.1,...]'` 直插 SQL，不经 `register_vector`）。依赖瘦身也是面试点：云端构建快、内存省。
+
+**访问码护栏**：环境变量 `CHATBI_ACCESS_CODE` 设置后，`/api/ask` 与 `/api/ask_sync` 必须带 `X-Access-Code` 头（401 拦截），`/api/meta` 永远放行（前端要先知道要不要输码）。防的是拿到链接的陌生人刷接口烧 LLM key。不设置则护栏不启用，本地开发零影响。前端输码后存 localStorage，401 自动重新弹码。
+
+手动步骤（账号注册只能本人做）：
+
+1. **Neon 建库**（neon.tech 免费档）：建 project → 复制连接串（形如 `postgresql://...ep-xxx.neon.tech/neondb?sslmode=require`）
+2. **灌库**（本机跑，连云库）：
+
+   ```powershell
+   # ① Neon 默认库名是 neondb，而 pg_schema/readonly 脚本硬编码 chatbi → 先建同名库
+   $env:CHATBI_ADMIN_DSN = "postgresql://...neon.tech/neondb?sslmode=require"
+   psql $env:CHATBI_ADMIN_DSN -c "CREATE DATABASE chatbi;"
+   # ② 以下全部用 chatbi 库的连接串（URL 尾部 /neondb 改成 /chatbi）
+   $env:CHATBI_ADMIN_DSN = "postgresql://...neon.tech/chatbi?sslmode=require"
+   psql $env:CHATBI_ADMIN_DSN -f pg_schema.sql         # 建表 + CREATE EXTENSION vector（脚本内含，不用单独建）
+   .\.venv\Scripts\python.exe seed_data_pg.py          # CHATBI_ADMIN_DSN 覆盖默认本机 DSN
+   .\.venv\Scripts\python.exe seed_embeddings_pg.py    # 灌 26 条口径向量（需要智谱 key）
+   psql $env:CHATBI_ADMIN_DSN -f pg_readonly_setup.sql # 建只读账号
+   ```
+
+   ⚠️ 云上跑 `pg_readonly_setup.sql` 前把 `chatbi_ro` 的固定密码改强（公网可直连 Neon，弱密码不合适），Render 侧 `CHATBI_PG_DSN` 同步用新密码。
+
+3. **Render 建 Web Service**（render.com）：连 GitHub 仓库 → Runtime 选 Python
+   - Build: `pip install -r requirements-deploy.txt`
+   - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - 环境变量：`CHATBI_PG_DSN`（第 1 步的连接串，但 user 换成 chatbi_ro）、`USE_PG=1`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY`、`CHATBI_ACCESS_CODE`
+4. **验收**：手机开 Render 分配的 `https://xxx.onrender.com` → 输访问码 → 问「各省份装机容量排名」
+
+已知代价：免费实例 15 分钟无访问休眠，冷启动约 50 秒（面试演示前先戳一下唤醒）；Neon 免费 compute 同样会自动 suspend，首查慢几秒属正常。
+
+
 ## 接真模型（明早第 5 步）
 
 ```powershell

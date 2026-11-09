@@ -69,7 +69,12 @@ def connect_readonly():
         import psycopg  # 延迟导入：SQLite 模式不依赖 psycopg，兜底路径零新依赖
         from psycopg.rows import dict_row
         # psycopg3 位置参数只收 conninfo 字符串；kwargs 必须全部走关键字传
-        conn = psycopg.connect(PG_DSN) if PG_DSN else psycopg.connect(**PG_CONN_KWARGS)
+        # ⚠️ DSN 整串覆盖路径（Neon/Render 上云）也必须带上这两道护栏：
+        # kwargs 优先级高于 conninfo 串内同名字段，二者共存合法。
+        # 2026-11-09 审查发现：原写法 DSN 路径裸连，statement_timeout（慢查询掐断）
+        # 和 connect_timeout（连接 hang 降级）在云上静默失效。
+        conn = (psycopg.connect(PG_DSN, options="-c statement_timeout=5000", connect_timeout=3)
+                if PG_DSN else psycopg.connect(**PG_CONN_KWARGS))
         # ⚠️ 方言差异（2026-10-21 回归实踩）：text2sql.retrieve_metrics 用 r["metric_name"]
         # 按列名取值——SQLite 侧靠 row_factory = sqlite3.Row 撑着，psycopg 默认返回纯 tuple
         # 会直接 TypeError。dict_row 让 PG 侧行访问契约与 SQLite 对齐（返回 dict）。

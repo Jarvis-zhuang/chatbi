@@ -12,13 +12,16 @@ seed_data_pg.py —— ChatBI 灌数脚本 · PostgreSQL 版（W1 D1 派单2/3 �
 - executescript（建表 DDL）-> 表已由 pg_schema.sql 建好，这里只 TRUNCATE 清空重灌（幂等）
 - REAL(8字节) -> DOUBLE PRECISION(8字节)，Python float 原样插入，无精度换算
 """
+import os
 import re
 import psycopg
 
 import seed_data
 from seed_data import gen_plants, gen_daily, gen_devices_and_faults, load_glossary
 
-DSN = "host=127.0.0.1 port=5432 dbname=chatbi user=postgres password=postgres"
+# 管理连接：默认本机容器；连 Neon/Supabase 灌库时用 CHATBI_ADMIN_DSN 覆盖
+#（psycopg 直接吃 postgresql:// URL，sslmode=require 由 URL 自带）
+DSN = os.environ.get("CHATBI_ADMIN_DSN") or "host=127.0.0.1 port=5432 dbname=chatbi user=postgres password=postgres"
 
 
 class PGCompat:

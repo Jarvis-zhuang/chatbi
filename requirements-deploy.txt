@@ -1,0 +1,10 @@
+# 部署版依赖（Render 云端用）——刻意精简，与本地 requirements.txt 的差异：
+# - sentence-transformers：本地 embedding 方案残留，主链路零引用（embedding 走智谱 API），不装省 2GB+
+# - numpy / pgvector（python 包）：向量链路全程用 pgvector 文本字面量 '[0.1,...]' 直插 SQL，
+#   不经 register_vector，这两个包零引用
+# 差异登记见 README「部署」节
+fastapi
+uvicorn
+openai
+python-dotenv
+psycopg[binary]

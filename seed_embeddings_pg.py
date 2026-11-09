@@ -14,6 +14,7 @@ seed_embeddings_pg.py (D6 #3, 2026-11-06)
    否则向量还是旧定义的语义——检索层和内容层不同步，是 RAG 最隐蔽的静默 bug。
 5. 走 postgres 管理账号（UPDATE 需要写权限）；检索侧仍走 chatbi_ro 只读账号（SELECT 无碍）。
 """
+import os
 import sys
 from pathlib import Path
 
@@ -22,7 +23,8 @@ import psycopg
 sys.path.insert(0, str(Path(__file__).parent))
 from embed_client import DIM, embed_texts  # noqa: E402  单一事实源：灌库与检索共用
 
-DSN = "host=127.0.0.1 port=5432 dbname=chatbi user=postgres password=postgres"
+# 管理连接：默认本机容器；连 Neon 灌向量时用 CHATBI_ADMIN_DSN 覆盖
+DSN = os.environ.get("CHATBI_ADMIN_DSN") or "host=127.0.0.1 port=5432 dbname=chatbi user=postgres password=postgres"
 
 ALTER_SQL = "ALTER TABLE metric_glossary ADD COLUMN IF NOT EXISTS embedding vector(1024)"
 

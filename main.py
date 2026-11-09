@@ -7,7 +7,7 @@ main.py —— FastAPI 服务，SSE 流式推送	全链路事件，并托管简�
 import json
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -19,6 +19,18 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 app = FastAPI(title="ChatBI 智能问数 · 光伏电站场景")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# 公网演示护栏：设置 CHATBI_ACCESS_CODE 后，问数接口必须带 X-Access-Code。
+# 防的不是黑客，是拿到链接的陌生人刷接口烧 LLM key（真金白银）。
+# 未设置时护栏不启用 → 本地开发零影响；meta 接口永远放行（前端要先知道要不要输码）。
+ACCESS_CODE = os.environ.get("CHATBI_ACCESS_CODE", "").strip()
+
+
+def check_access(x_access_code: str = Header(default="")):
+    if not ACCESS_CODE:
+        return
+    if x_access_code != ACCESS_CODE:
+        raise HTTPException(status_code=401, detail="访问码不对")
 
 
 class AskRequest(BaseModel):
@@ -38,11 +50,12 @@ def meta():
         "model": os.getenv("OPENAI_MODEL", "deepseek-chat"),
         "max_retry": text2sql.MAX_RETRY,
         "row_limit": text2sql.ROW_LIMIT,
+        "auth_required": bool(ACCESS_CODE),
     }
 
 
 @app.post("/api/ask")
-def ask_stream(req: AskRequest):
+def ask_stream(req: AskRequest, _ok: None = Depends(check_access)):
     """
     考点 8：为什么用 SSE？全链路 5-15 秒，分步推送让用户看到「AI 在思考」。
     事件分类（对齐 AG-UI 的思路）：生命周期(step) / 文本增量(text) / 结果快照(result) / 异常(error)。
@@ -69,6 +82,6 @@ def ask_stream(req: AskRequest):
 
 
 @app.post("/api/ask_sync")
-def ask_sync(req: AskRequest):
+def ask_sync(req: AskRequest, _ok: None = Depends(check_access)):
     """非流式接口，给 eval.py 和自动化评测用"""
     return text2sql.ask(req.question)

@@ -46,6 +46,12 @@
   .refuse { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 12px;
             border-radius: 8px; }
   .hint { color: var(--muted); font-size: 12px; }
+  .gate { display: none; gap: 8px; align-items: center; background: #fffbeb; border: 1px solid #fde68a;
+          border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+  .gate.show { display: flex; }
+  .gate input { flex: 1; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; }
+  .gate button { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--brand); color: #fff; cursor: pointer; }
+  .gate .msg { color: var(--err); font-size: 12px; min-width: 0; }
   .chart { display: flex; align-items: flex-end; gap: 4px; height: 180px; padding-top: 8px; }
   .chart div { flex: 1; background: linear-gradient(180deg, #60a5fa, #2563eb); border-radius: 3px 3px 0 0;
                position: relative; min-width: 2px; }
@@ -62,6 +68,12 @@
   <span class="mode" id="mode">加载中…</span>
 </header>
 <main>
+  <div class="gate" id="gate">
+    <span>🔒 输入访问码：</span>
+    <input id="code" type="password" placeholder="访问码" />
+    <button id="saveCode">进入</button>
+    <span class="msg" id="codeMsg"></span>
+  </div>
   <div class="ask">
     <input id="q" placeholder="试试：各省份装机容量排名 / 弃光率高于 5% 的电站" />
     <button id="go">提问</button>
@@ -81,9 +93,34 @@ const $q = document.getElementById('q');
 const $out = document.getElementById('out');
 const $go = document.getElementById('go');
 
+let ACCESS = localStorage.getItem('chatbi_access_code') || '';
+const $gate = document.getElementById('gate');
+const $code = document.getElementById('code');
+
+function showGate(msg) {
+  $gate.classList.add('show');
+  if (msg) document.getElementById('codeMsg').textContent = msg;
+  if (ACCESS) $code.value = ACCESS;
+}
+
+function authHeaders() {
+  return ACCESS ? { 'X-Access-Code': ACCESS } : {};
+}
+
+document.getElementById('saveCode').onclick = () => {
+  const v = $code.value.trim();
+  if (!v) return;
+  ACCESS = v;
+  localStorage.setItem('chatbi_access_code', v);
+  document.getElementById('codeMsg').textContent = '';
+  $gate.classList.remove('show');
+};
+$code.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('saveCode').click(); });
+
 fetch('/api/meta').then(r => r.json()).then(m => {
   document.getElementById('mode').textContent =
     m.mode === 'MOCK' ? 'MOCK 模式（免 API Key，链路照跑）' : 'LLM 模式 · ' + m.model;
+  if (m.auth_required && !ACCESS) showGate();
 }).catch(() => {});
 
 const chips = document.getElementById('chips');
@@ -138,9 +175,16 @@ function ask(question) {
   const ui = newSession(question);
   $go.disabled = true;
   fetch('/api/ask', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ question })
   }).then(async res => {
+    if (res.status === 401) {
+      ACCESS = '';
+      localStorage.removeItem('chatbi_access_code');
+      showGate('访问码不对，请重新输入');
+      $go.disabled = false;
+      return;
+    }
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buf = '';
