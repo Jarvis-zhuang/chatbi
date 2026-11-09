@@ -13,3 +13,5 @@ _tmp_*
 # eval evidence files (local only)
 _eval_*.txt
 _eval_base.json
+_eval_*.json
+_gw_*
