@@ -394,12 +394,24 @@ def _retrieve_by_vector(question: str, limit: int) -> list:
         if not is_enabled():
             return []
         qvec = embed_query_cached(question)
+        # 距离阈值（2026-11-09 校准）：挡「纯无关题」的垃圾注入——校准时「1 加 1 等于几」
+        # 会注入「等效利用小时」口径（dist 0.55），域外护栏漏过的题会被污染。
+        # 校准方法：HIT 组 15 条新问法（与评测集独立，防阈值版背题）上界 0.4531，
+        # MISS 组 10 条纯无关下界 0.5498，间隔 0.097，取中央 0.50。
+        # 边界知识（校准实测）：EDGE 组（带领域词的域外题「美国的转换效率」）距离 0.33-0.44
+        # 落在 HIT 区间内——距离区分不了「相关但区域错」，那些题靠域外护栏（unknown_region），
+        # 每层各管各的。#25 的过度注入也拦不住（top3 语义真相关 0.31-0.41）——它是粒度稀释问题，
+        # 修法走正例瘦身，不归阈值管。
+        # ⚠️ 阈值是「模型+语料」的伴生属性：换 embedding 模型 = 向量空间重算，必须整库重灌
+        # 并重新校准，不是改个数字。校准脚本：_d6_threshold_calibration.py
+        threshold = float(os.getenv("CHATBI_VECTOR_THRESHOLD", "0.50"))
         conn = connect_readonly()
         try:
             rows = conn.execute(
                 "SELECT metric_id FROM metric_glossary WHERE embedding IS NOT NULL "
+                "AND embedding <=> %s <= %s "
                 "ORDER BY embedding <=> %s LIMIT %s",
-                (qvec, limit),
+                (qvec, threshold, qvec, limit),
             ).fetchall()
         finally:
             conn.close()
