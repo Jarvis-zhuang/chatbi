@@ -1149,6 +1149,18 @@ def _empty_notice(rows: list) -> str | None:
 
 
 # ============================================================ 第 6 站：编排（含流式事件）
+# 直答判定：ask() 与 ask_stream() 共用同一正则 ——
+# 11/09 实锤教训：两套实现各写一份正则，修了 ask() 漏了 ask_stream()，
+# 页面问定义返回数字而评测全绿（eval 走 ask()，页面走 ask_stream()，分歧评测看不见）。
+# 以后改这份词表只改这一处。
+DEFINITION_RE = re.compile(r"(定义|口径|公式|怎么算|什么意思|怎么定义|概念|含义)")
+
+
+def is_definition_question(q: str, metrics: list) -> bool:
+    """问定义 → 直答口径（RAG 直答分支的开关）。两套链路共用，防漂移。"""
+    return bool(metrics) and bool(DEFINITION_RE.search(q))
+
+
 def ask_stream(question: str) -> Iterator[dict]:
     """
     考点 8：为什么全流程要 SSE 分步推送？全链路 5-15 秒，让用户看到「AI 在思考」，
@@ -1187,6 +1199,13 @@ def ask_stream(question: str) -> Iterator[dict]:
         yield {"event": "text", "step": 2, "text": "命中业务口径：" + "、".join(m["metric_name"] for m in metrics)}
     else:
         yield {"event": "step", "step": 2, "title": "口径检索", "text": "未命中，按表结构推断"}
+
+    # 直答分支（与 ask() 同一判定）：问定义直接给口径，不进 SQL —— 11/09 修：流式路径原来缺这个分支
+    if is_definition_question(q, metrics):
+        yield {"event": "glossary", "step": 3, "title": "口径回答",
+               "text": metrics[0]["metric_name"] + "：" + metrics[0]["definition"]
+                       + "\n口径：" + metrics[0]["formula"] + "（单位 " + (metrics[0]["unit"] or "") + "，来源 " + (metrics[0]["source_doc"] or "") + "）"}
+        return
 
     # step 3 生成 SQL（含自修正循环 + 自检反馈循环）
     error_hint = ""
@@ -1265,7 +1284,7 @@ def ask(question: str) -> dict:
         return out
 
     metrics = retrieve_metrics(question)
-    if metrics and re.search(r"(定义|口径|公式|怎么算|什么意思|怎么定义|概念|含义)", question):
+    if is_definition_question(question, metrics):
         out.update(ok=True, answer=metrics[0]["definition"])
         return out
     error_hint = ""
