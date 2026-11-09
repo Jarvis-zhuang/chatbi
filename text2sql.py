@@ -458,7 +458,7 @@ def retrieve_metrics(question: str, limit: int = 3) -> list[dict]:
                 score += 6
         # 问法加分只对「已经命中指标名/别名」的条目生效——
         # 否则「天气怎么样」会因为带个「怎么」让所有口径都得分（D1 实测踩过的坑）
-        if score and re.search(r"(怎么|如何|什么是|计算公式|定义|口径|怎么算|什么意思)", question):
+        if score and re.search(r"(怎么|如何|什么是|计算公式|定义|口径|怎么算|什么意思|概念|含义)", question):
             score += 2
         if score:
             kw_ranked.append((score, r["metric_id"]))
@@ -1265,7 +1265,7 @@ def ask(question: str) -> dict:
         return out
 
     metrics = retrieve_metrics(question)
-    if metrics and re.search(r"(定义|口径|公式|怎么算|什么意思|怎么定义)", question):
+    if metrics and re.search(r"(定义|口径|公式|怎么算|什么意思|怎么定义|概念|含义)", question):
         out.update(ok=True, answer=metrics[0]["definition"])
         return out
     error_hint = ""
