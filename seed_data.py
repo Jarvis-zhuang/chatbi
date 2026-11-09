@@ -131,13 +131,10 @@ GLOSRARY = [
      "SUM(generation_kwh)", "kWh", "公司指标口径表 V3.2"),
     ("等效利用小时", "利用小时,等效小时,发电小时数",
      "统计周期内发电量折算到额定容量下的满发小时数，用于横向对比不同规模电站的效率。"
-     "单电站＝该站发电量合计÷该站额定容量。多站或省级汇总：先按电站分组算（子查询 GROUP BY 电站，"
-     "容量在电站粒度取维表单值），外层再按需聚合或排名",
+     "单电站＝该站发电量合计÷该站额定容量；多站或省级汇总先按电站分组，再按需聚合",
      "单站：SUM(f.generation_kwh)/MAX(p.capacity_mw)/1000；"
-     "多站/省级：FROM(按电站 GROUP BY：SUM(f.generation_kwh) AS gen, p.capacity_mw AS cap) "
-     "外层 SUM(gen)/SUM(cap)/1000（排名加权）或 AVG(gen/cap/1000)（全省平均）。"
-     "禁止对 JOIN 后明细行 SUM(capacity_mw)（容量按天复制会×730），"
-     "禁止 SUM(DISTINCT capacity_mw)（同容量的不同电站会被错误合并）", "h", "公司指标口径表 V3.2"),
+     "多站/省级：子查询先按电站 GROUP BY（SUM 发电量、容量取维表单值），"
+     "外层 SUM(gen)/SUM(cap) 或 AVG(gen/cap)，禁止对 JOIN 明细行 SUM(capacity_mw)", "h", "公司指标口径表 V3.2"),
     ("弃光率", "限发率,弃风弃光,丢弃率",
      "因电网消纳受限等原因被迫放弃的电量占理论发电量的比例",
      "SUM(curtailment_kwh) / (SUM(generation_kwh) + SUM(curtailment_kwh))", "%", "调度运行报表口径 V1.5"),
