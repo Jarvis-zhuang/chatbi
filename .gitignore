@@ -12,7 +12,13 @@ _tmp_*
 
 # eval evidence files (local only)
 _eval_*.txt
+_eval_*.log
 _eval_base.json
 _eval_*.json
 _gw_*
+
+# day-script experiment runners (local only)
+_d6_*
+_d9_*
+
 _deploy_neon_ro_password.txt
