@@ -6,3 +6,8 @@ psycopg[binary]
 pgvector
 numpy
 sentence-transformers
+
+# D8（11/11）可选 Agent 模式专用，仅本地链路使用。
+# 部署版 requirements-deploy.txt 刻意不装：agent_graph.py 与 main.py/text2sql.py 物理隔离，
+# 云端零引用，不为一个默认关闭的实验模式付构建时间和内存。
+langgraph>=1.0,<2

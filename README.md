@@ -220,6 +220,7 @@ cd D:\code\ai\chatbi
 方案拍板（2026-11-09）：**A. Render 免费 Web Service + Neon 免费 PG**，弃 HF Spaces（hf.space 国内经常打不开，HR 手机演示失败=白做）。全部简历卖点保留：真 PG + pgvector + `chatbi_ro` 只读账号（Neon 允许 `CREATE ROLE`，方案 A 平移不用降级 `SET TRANSACTION READ ONLY`）。
 
 **部署版依赖**：`requirements-deploy.txt`（5 个包）刻意与本地 `requirements.txt` 不同——剔除 `sentence-transformers`（本地方案残留，主链路零引用，embedding 走智谱 API）、`numpy` 与 `pgvector` python 包（向量链路全程用 pgvector 文本字面量 `'[0.1,...]'` 直插 SQL，不经 `register_vector`）。依赖瘦身也是面试点：云端构建快、内存省。
+**D8（11/11）起本地 `requirements.txt` 多了 `langgraph`，部署版仍不装**：可选 Agent 模式（`agent_graph.py`）与 `main.py` / `text2sql.py` 物理隔离、默认关闭，云端零引用；不为一个实验模式付构建时间和内存。
 
 **访问码护栏**：环境变量 `CHATBI_ACCESS_CODE` 设置后，`/api/ask` 与 `/api/ask_sync` 必须带 `X-Access-Code` 头（401 拦截），`/api/meta` 永远放行（前端要先知道要不要输码）。防的是拿到链接的陌生人刷接口烧 LLM key。不设置则护栏不启用，本地开发零影响。前端输码后存 localStorage，401 自动重新弹码。
 
@@ -663,11 +664,56 @@ HIT 组 15 条新问法上界 0.4531 / MISS 组 10 条纯无关下界 0.5498，�
 「DeepSeek 服务端漂移」「双厂商模型同变」，直到发现生成 SQL 带 MOCK 标志性中文列名才定位。
 **防再犯：跑评测前先打印 `USE_LLM`；评测脚本统一 `set -a; source .env; set +a`。**
 
+## 可选 Agent 模式：LangGraph 最小闭环（D8 · 2026-11-11）
+
+**一句话**：默认问数链路仍是 `text2sql.ask()`，一行未改；`agent_graph.py` 是独立文件，只有显式运行它才走这张图。依据 15 号文件「不必接全量回归，LangGraph 做成可选 Agent 模式，数字塌了回退手写链路」+ 18 号文件 D8 B 档「三节点 + 3 工具跑通即止，不做 MCP / 不做多轮」。
+
+```mermaid
+flowchart LR
+  START([START]) --> PLAN[plan 规划]
+  PLAN --> TOOLS[tools 工具]
+  TOOLS --> REFLECT{reflect 反思}
+  REFLECT -- 失败/结果可疑 且 attempts<2 --> TOOLS
+  REFLECT -- 正常 或 达硬上限 --> STOP([END])
+```
+
+| 节点 | 干什么 | 为什么单独一层 |
+| --- | --- | --- |
+| `plan` | 确定性路由三个工具；护栏与定义类直答在这一层短路 | 路由规则显式可读，「为什么调这个工具」能逐行指出来，不藏在模型输出里 |
+| `tools` | 按游标执行注册表里的一个工具 | 工具是可被路由的实体，不是散着调的函数 |
+| `reflect` | 看执行结果；失败/可疑就带 hint 回 `tools` 重跑 SQL | 执行成功 ≠ 结果对；重试必须封顶 |
+
+三个工具（`TOOLS` 注册表，全是现有函数的薄包装，不重写业务逻辑）：
+
+| 工具 | 包装了谁 | 复用到的既有能力 |
+| --- | --- | --- |
+| `get_schema` | `select_tables` + `render_schema` | 只取相关表，注释是业务口径不是字段名 |
+| `retrieve_metrics` | `retrieve_metrics` | 双路 RRF + 阈值校准 |
+| `run_readonly_sql` | `run_sql` | 四层校验 + 行数封顶 + 只读账号 |
+
+```powershell
+.\.venv\Scripts\python.exe agent_graph.py "各省份装机容量排名"
+.\.venv\Scripts\python.exe test_agent_graph.py     # 10 个断言，MOCK 模式，零成本
+```
+
+**验收口径（11/11 实测）**：MOCK / SQLite 档，10 个断言全通过——完整问数拿到 14 行、三个工具各调一次、定义类只调口径检索、注入在规划层短路、故障注入下重试到 `MAX_AGENT_RETRY=2` 后停、默认 `ask()` 同题结果等价。**这是链路验收，不是效果验收**：本日不跑 32 题全量回归，不报任何准确率数字；既有 dev 29/32、held-out 19/25 基线不受影响。
+
+**四个能讲清的设计决策**：
+
+1. **重试硬上限 2 次**：模型抖动或 SQL 一直写错时，烧的是额度和时间。图内 `MAX_AGENT_RETRY` + 框架 `recursion_limit=20` 是两道保险。
+2. **重试只回退到 SQL 工具**：选表和口径检索是确定性的，重跑纯浪费 token。
+3. **护栏前置于图且复用同一套判定**：Agent 模式不能成为绕过安全校验的后门。
+4. **云端不装 langgraph**：实验代码不进生产依赖。将来要接 `/api/ask_sync`，需先拍板并跑全量回归；数字塌了按 15 号文件回退手写链路。
+
+> 环境留痕：`uv pip check` 报 `.venv` 里 `pydantic-2.13.5.dist-info` 缺 WHEEL 文件（既存问题，非本次安装引入）；`import pydantic` 与 `main:app` 均正常（9 条路由可加载），未重建 venv，避免动既有环境。
+
 ## 目录结构
 
 | 文件                          | 作用                                                                    |
 | --------------------------- | --------------------------------------------------------------------- |
 | `text2sql.py`               | **核心。全链路都在这里**，每个函数上标了对应哪道面试题（`# 考点 N：`）                              |
+| `agent_graph.py`            | D8：可选 Agent 模式，LangGraph 三节点 + 3 工具注册表（默认关，与主线物理隔离）                   |
+| `test_agent_graph.py`       | D8：最小闭环 10 个断言（MOCK 零成本，含故障注入与主线等价性）                                |
 | `main.py`                   | FastAPI：SSE 接口 `/api/ask` + 同步接口 `/api/ask_sync` + 托管前端               |
 | `db.py`                     | 只读连接（SQLite `mode=ro`；D2 换 Postgres 时只动这个文件）                          |
 | `seed_data.py`              | 合成数据生成器 + 业务口径表 26 条                                                  |
