@@ -6,8 +6,9 @@ main.py —— FastAPI 服务，SSE 流式推送	全链路事件，并托管简�
 """
 import json
 import os
+import time
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,6 +34,39 @@ def check_access(x_access_code: str = Header(default="")):
         raise HTTPException(status_code=401, detail="访问码不对")
 
 
+# ---------- 访客记录（2026-11-12） ----------
+# 目的：区分「我自己的访问」和「真实访客」——谁打开了页面、谁提了什么问题。
+# 存 data/visitors.jsonl（一行一条 JSON），与业务库/评测完全隔离。
+# eval.py 是纯函数级评测不走 HTTP，不会混入；/api/ask_sync 给自动化脚本用，也不打点。
+VISITOR_LOG = os.path.join(BASE_DIR, "data", "visitors.jsonl")
+
+
+def client_ip(request: Request) -> str:
+    """有反代/内网穿透时取 X-Forwarded-For 的第一跳，否则取直连地址"""
+    xff = request.headers.get("x-forwarded-for", "")
+    ip = xff.split(",")[0].strip() if xff else ""
+    if not ip and request.client:
+        ip = request.client.host or ""
+    return ip or "unknown"
+
+
+def log_visitor(request: Request, event: str, question: str = "") -> None:
+    """event: open=打开页面 / ask=提问。记录失败绝不影响主链路。"""
+    try:
+        rec = {
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "ip": client_ip(request),
+            "ua": (request.headers.get("user-agent", "") or "")[:120],
+            "event": event,
+            "q": (question or "")[:120],
+        }
+        os.makedirs(os.path.dirname(VISITOR_LOG), exist_ok=True)
+        with open(VISITOR_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 class AskRequest(BaseModel):
     question: str
 
@@ -43,8 +77,9 @@ def index():
 
 
 @app.get("/api/meta")
-def meta():
+def meta(request: Request):
     """给前端展示当前运行模式，方便一眼看出是 MOCK 还是真模型"""
+    log_visitor(request, "open")
     return {
         "mode": "LLM" if text2sql.USE_LLM else "MOCK",
         "model": os.getenv("OPENAI_MODEL", "deepseek-chat"),
@@ -54,13 +89,54 @@ def meta():
     }
 
 
+@app.get("/api/visitors")
+def visitors(_ok: None = Depends(check_access)):
+    """访客统计：按 IP 聚合（次数/首末/UA/最近提问）+ 逐条访问明细。护栏与 /api/ask 一致。"""
+    agg: dict = {}
+    recents: list = []
+    try:
+        with open(VISITOR_LOG, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                recents.append(rec)
+                ip = rec.get("ip") or "unknown"
+                v = agg.setdefault(ip, {"ip": ip, "hits": 0, "first": rec.get("ts", ""),
+                                        "last": rec.get("ts", ""), "uas": [], "questions": []})
+                v["hits"] += 1
+                v["last"] = rec.get("ts", "") or v["last"]
+                ua = rec.get("ua") or ""
+                if ua and ua not in v["uas"]:
+                    v["uas"].append(ua)
+                if rec.get("event") == "ask" and rec.get("q"):
+                    v["questions"].append(rec["q"])
+    except FileNotFoundError:
+        pass
+    lst = sorted(agg.values(), key=lambda v: v["last"], reverse=True)
+    for v in lst:
+        v["uas"] = v["uas"][:3]
+        v["questions"] = v["questions"][-10:]
+    recents.reverse()  # 最新在前
+    return {
+        "total_hits": sum(v["hits"] for v in lst),
+        "unique_ips": len(lst),
+        "visitors": lst,
+        "recent": recents[:200],
+    }
+
+
 @app.post("/api/ask")
-def ask_stream(req: AskRequest, _ok: None = Depends(check_access)):
+def ask_stream(req: AskRequest, request: Request, _ok: None = Depends(check_access)):
     """
     考点 8：为什么用 SSE？全链路 5-15 秒，分步推送让用户看到「AI 在思考」。
     事件分类（对齐 AG-UI 的思路）：生命周期(step) / 文本增量(text) / 结果快照(result) / 异常(error)。
     """
-    import time
+    log_visitor(request, "ask", req.question)
 
     def gen():
         # MOCK 模式下事件是瞬间算完的，不加节奏的话四步会一闪而过，

@@ -4,7 +4,11 @@ __pycache__/
 .env
 data/*.db
 data/*.sqlite3
+data/*.jsonl
 _out.txt
+
+# built test pages (regenerated from static/index.html by _tmp_* scripts)
+static/_ui_*.html
 
 # local scratch / agent workspace
 .workbuddy/
