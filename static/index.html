@@ -1292,7 +1292,7 @@ var vdata = null, vtab = 'agg';
 function renderVisitorPanel() {
   if (!vdata) return;
   if (vtab === 'agg') {
-    $('vSummary').textContent = '累计访问 ' + vdata.total_hits + ' 次 · ' + vdata.unique_ips + ' 个不同 IP';
+    $('vSummary').textContent = '累计访问 ' + vdata.total_hits + ' 次 · ' + vdata.unique_ips + ' 个不同 IP（时间为北京时间 UTC+8）';
     $('vList').innerHTML = vdata.visitors.map(function (v) {
       return '<div class="v-item"><div class="v-ip">' + esc(v.ip) +
         '<span class="v-meta">' + v.hits + ' 次 · 首次 ' + esc(v.first) + ' · 最近 ' + esc(v.last) + '</span></div>' +
@@ -1304,7 +1304,7 @@ function renderVisitorPanel() {
     }).join('') || '<div class="side-empty" style="padding:32px 12px">还没有访客记录</div>';
   } else {
     var recent = vdata.recent || [];
-    $('vSummary').textContent = '最近 ' + recent.length + ' 条访问（最新在前）';
+    $('vSummary').textContent = '最近 ' + recent.length + ' 条访问（最新在前 · 时间为北京时间 UTC+8）';
     $('vList').innerHTML = recent.length ?
       '<table class="v-table"><thead><tr>' +
       '<th>时间</th><th>IP</th><th>动作</th><th>问题</th><th>UA</th></tr></thead><tbody>' +

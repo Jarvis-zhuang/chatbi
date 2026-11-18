@@ -7,6 +7,7 @@ main.py —— FastAPI 服务，SSE 流式推送	全链路事件，并托管简�
 import json
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -53,11 +54,13 @@ def client_ip(request: Request) -> str:
 def log_visitor(request: Request, event: str, question: str = "") -> None:
     """event: open=打开页面 / ask=提问。记录失败绝不影响主链路。"""
     try:
+        # Render 服务器跑在 UTC：访客时间必须显式落到北京时间（中国无夏令时，固定 +8）
+        cn_now = datetime.now(timezone(timedelta(hours=8)))
         ua = (request.headers.get("user-agent", "") or "")[:120]
         if "uptime" in ua.lower():
             return  # UptimeRobot 保活 ping 不打点：~288 条/天噪音会把 /api/visitors 的 200 条窗口滚爆
         rec = {
-            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "ts": cn_now.strftime("%Y-%m-%d %H:%M:%S"),
             "ip": client_ip(request),
             "ua": ua,
             "event": event,
