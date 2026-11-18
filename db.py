@@ -98,7 +98,12 @@ def execute_sql(sql):
     差异不外泄给 text2sql/eval。2026-10-21 实踩：psycopg dict_row 下 list(dict)
     拿到的是键名不是值，锚点日期变成字符串 'max'，一路传到 _prev_month 才炸
     （故障点离根因三公里）——适配层不归一化，方言差异就会以最远的事故点爆发。
+    2026-11-18 再归一化一类：PG 的 ROUND(x, N) 走 numeric 版（SQLite 走 float 版），
+    psycopg 返回 Decimal → json.dumps 直接 TypeError → SSE 静默断流
+    （线上实锤："发电量最高的 3 个电站" 停在生成 SQL 后无结果无报错）。
+    eval 路径没炸是因为 Decimal == float 恰好为 True，JSON 序列化才见真章。
     """
+    from decimal import Decimal
     conn = connect_readonly()
     try:
         cur = conn.cursor()
@@ -108,6 +113,8 @@ def execute_sql(sql):
         cols = [d[0] for d in cur.description] if cur.description else []
         elapsed = round((time.perf_counter() - t0) * 1000, 1)
         data = [list(r.values()) if isinstance(r, dict) else list(r) for r in rows]
+        # Decimal → float：JSON 可序列化，且 eval 的 Decimal == float 语义不变
+        data = [[float(v) if isinstance(v, Decimal) else v for v in r] for r in data]
         return cols, data, elapsed
     finally:
         conn.close()
