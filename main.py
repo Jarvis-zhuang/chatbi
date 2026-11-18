@@ -53,10 +53,13 @@ def client_ip(request: Request) -> str:
 def log_visitor(request: Request, event: str, question: str = "") -> None:
     """event: open=打开页面 / ask=提问。记录失败绝不影响主链路。"""
     try:
+        ua = (request.headers.get("user-agent", "") or "")[:120]
+        if "uptime" in ua.lower():
+            return  # UptimeRobot 保活 ping 不打点：~288 条/天噪音会把 /api/visitors 的 200 条窗口滚爆
         rec = {
             "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
             "ip": client_ip(request),
-            "ua": (request.headers.get("user-agent", "") or "")[:120],
+            "ua": ua,
             "event": event,
             "q": (question or "")[:120],
         }
