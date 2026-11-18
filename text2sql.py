@@ -1213,7 +1213,15 @@ def ask_stream(question: str) -> Iterator[dict]:
     selfcheck_used = 0
     for attempt in range(MAX_RETRY + 1 + SELFCHECK_MAX):
         if USE_LLM:
-            sql = llm_generate_sql(q, tables, metrics, error_hint)
+            # 兔底：LLM API 异常（429/余额/超时/网络）不能让生成器暴毙——
+            # 那会变成前端"静默断流"，用户看不到任何错误。转成明确的 error 事件。
+            try:
+                sql = llm_generate_sql(q, tables, metrics, error_hint)
+            except Exception as e:  # noqa: BLE001
+                yield {"event": "error", "step": 3,
+                       "title": "模型调用失败",
+                       "text": type(e).__name__ + ": " + str(e)}
+                return
         else:
             sql = mock_generate_sql(q)
 

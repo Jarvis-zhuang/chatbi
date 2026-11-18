@@ -73,7 +73,10 @@ def connect_readonly():
         # kwargs 优先级高于 conninfo 串内同名字段，二者共存合法。
         # 2026-11-09 审查发现：原写法 DSN 路径裸连，statement_timeout（慢查询掐断）
         # 和 connect_timeout（连接 hang 降级）在云上静默失效。
-        conn = (psycopg.connect(PG_DSN, options="-c statement_timeout=5000", connect_timeout=3)
+        # 2026-11-18 放宽：Neon 免费档 autosuspend 冷启动（计算唤醒）轻松超过
+        # connect 3s / 语句 5s 的旧值，冷启动第一问很容易被掐 → 重试风暴。
+        # DSN 分支（云端）放宽到 8s/15s，本地 Docker 分支（PG_CONN_KWARGS）不动。
+        conn = (psycopg.connect(PG_DSN, options="-c statement_timeout=15000", connect_timeout=8)
                 if PG_DSN else psycopg.connect(**PG_CONN_KWARGS))
         # ⚠️ 方言差异（2026-10-21 回归实踩）：text2sql.retrieve_metrics 用 r["metric_name"]
         # 按列名取值——SQLite 侧靠 row_factory = sqlite3.Row 撑着，psycopg 默认返回纯 tuple

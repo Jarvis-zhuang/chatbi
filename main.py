@@ -146,11 +146,22 @@ def ask_stream(req: AskRequest, request: Request, _ok: None = Depends(check_acce
         # 看起来像"没流式"。真模型模式下这段 sleep 相对于模型延迟可以忽略。
         pace = 0.05 if text2sql.USE_LLM else 0.45
         first = True
-        for ev in text2sql.ask_stream(req.question):
-            if not first:
-                time.sleep(pace)
-            first = False
-            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        # 兔底：生成器中途抛异常（LLM API 故障 / DB 层未捕获错误）时，
+        # 不兜底 = 连接静默断掉，前端只会看到"走到一半就没了"且无错误提示。
+        # 2026-11-18 手机端实锤：两次提问都停在生成 SQL 后无结果无报错，就是这类静默死亡。
+        try:
+            for ev in text2sql.ask_stream(req.question):
+                if not first:
+                    time.sleep(pace)
+                first = False
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except Exception as e:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            yield "data: " + json.dumps(
+                {"event": "error", "step": 4, "title": "服务端内部错误",
+                 "text": type(e).__name__ + ": " + str(e)},
+                ensure_ascii=False) + "\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
