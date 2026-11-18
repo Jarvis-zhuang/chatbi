@@ -310,7 +310,8 @@
     .side-mask.show { opacity: 1; pointer-events: auto; }
     .caps { grid-template-columns: 1fr; }
 
-    /* 顶栏收紧：375px 也要装下标题 + 徽章 + 3 个按钮 */
+    /* 顶栏收紧：375px 也要装下标题 + 徽章 + 按钮；访客面板是管理功能，移动端直接隐藏 */
+    #visitorBtn { display: none; }
     header { padding: 0 10px; gap: 8px; }
     header h1 { font-size: 15px; white-space: nowrap; }
     .badge { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
