@@ -32,7 +32,8 @@
   .badge.llm  { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
   .spacer { flex: 1; }
   .hbtn { border: 1px solid var(--line); background: var(--card); color: var(--text);
-          border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+          border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+          white-space: nowrap; }
   .hbtn:hover { border-color: var(--brand); color: var(--brand); }
   .hbtn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
   .hbtn.primary:hover { background: #1d4ed8; color: #fff; }
@@ -59,7 +60,8 @@
   .cap b { display: block; margin: 6px 0 2px; font-size: 14px; }
   .cap span { font-size: 12.5px; color: var(--muted); }
   .demo-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-  .demo-group .g-title { font-size: 12px; color: var(--muted-2); flex: none; margin-right: 4px; }
+  .demo-group .g-title { font-size: 12px; color: var(--muted-2); flex: none; margin-right: 4px;
+                         white-space: nowrap; }
   .demo-group .chips { margin-bottom: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 0; }
   .chips span { font-size: 12.5px; color: var(--text); padding: 5px 12px; background: var(--card);
@@ -252,6 +254,7 @@
                   display: none; align-items: center; justify-content: center; }
   .gate-overlay.show { display: flex; }
   .gate-card { background: var(--card); border-radius: 14px; padding: 24px; width: 340px;
+               max-width: calc(100vw - 32px);
                box-shadow: 0 10px 40px rgba(0,0,0,.18); }
   .gate-card h3 { margin: 0 0 6px; font-size: 16px; }
   .gate-card p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
@@ -266,7 +269,7 @@
   /* ---------- 访客面板 ---------- */
   .gate-card.wide { width: 600px; max-width: 92vw; max-height: 72vh; display: flex; flex-direction: column; }
   .gate-card.wide p { margin-bottom: 10px; }
-  .vlist { overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; flex: 1; min-height: 0; }
+  .vlist { overflow: auto; border: 1px solid var(--line); border-radius: 8px; flex: 1; min-height: 0; }
   .v-item { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
   .v-item:last-child { border-bottom: 0; }
   .v-ip { font-weight: 600; font-size: 13px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
@@ -293,11 +296,39 @@
   .act-open { background: var(--line-soft); color: var(--muted); border-radius: 4px;
               padding: 1px 6px; font-size: 11px; white-space: nowrap; }
 
+  /* ---------- 移动端适配 ---------- */
+  #sideToggle { display: none; }  /* 桌面端隐藏会话按钮，显隐改由媒体查询控制（不再靠 JS 一次性判宽） */
+
   @media (max-width: 960px) {
+    #sideToggle { display: block; }
     aside.side { position: fixed; right: 0; top: 56px; bottom: 0; z-index: 30;
+                 width: min(320px, 86vw);
                  transform: translateX(100%); transition: transform .2s; box-shadow: -6px 0 24px rgba(0,0,0,.08); }
     aside.side.open { transform: none; }
+    .side-mask { position: fixed; inset: 56px 0 0 0; background: rgba(15,23,42,.35); z-index: 29;
+                 opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .side-mask.show { opacity: 1; pointer-events: auto; }
     .caps { grid-template-columns: 1fr; }
+
+    /* 顶栏收紧：375px 也要装下标题 + 徽章 + 3 个按钮 */
+    header { padding: 0 10px; gap: 8px; }
+    header h1 { font-size: 15px; white-space: nowrap; }
+    .badge { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
+    .hbtn { padding: 6px 8px; }
+
+    /* 内容区与输入区：去掉桌面端的对齐缩进 */
+    .thread, .welcome { padding-left: 14px; padding-right: 14px; }
+    .composer-wrap { padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+    .composer { padding-left: 0; }
+    /* 输入框 16px 起，避免 iOS Safari 聚焦时自动放大页面 */
+    .composer textarea { font-size: 16px; }
+    .hintbar .kb-only { display: none; }
+    .jump { right: 14px; bottom: 108px; }
+    .msg.user .bubble { max-width: 88%; }
+  }
+  /* 手机浏览器地址栏伸缩时用动态视口高度，避免底部输入框被顶出屏幕外 */
+  @supports (height: 100dvh) {
+    html, body { height: 100dvh; }
   }
 </style>
 </head>
@@ -310,10 +341,11 @@
   <div class="spacer"></div>
   <button class="hbtn" id="visitorBtn">🌐 访客</button>
   <button class="hbtn" id="newChat">＋ 新会话</button>
-  <button class="hbtn" id="sideToggle" style="display:none">会话</button>
+  <button class="hbtn" id="sideToggle">会话</button>
 </header>
 
 <div class="layout">
+  <div class="side-mask" id="sideMask"></div>
   <div class="chat-col">
     <div class="chat-scroll" id="scroll">
       <div class="welcome" id="welcome">
@@ -339,7 +371,7 @@
           </button>
         </div>
         <div class="hintbar">
-          <span>Enter 发送 / Shift+Enter 换行 / Esc 停止</span>
+          <span class="kb-only">Enter 发送 / Shift+Enter 换行 / Esc 停止</span>
           <span id="runHint" style="margin-left:auto"></span>
         </div>
       </div>
@@ -673,7 +705,7 @@ $sideList.addEventListener('click', function (e) {
   save();
   renderThread();
   renderSidebar();
-  if (window.innerWidth <= 960) $('side').classList.remove('open');
+  toggleSide(false);
 });
 
 /* ---------- 线程渲染 ---------- */
@@ -1363,8 +1395,15 @@ $('newChat').onclick = function () {
   renderSidebar();
   $q.focus();
 };
-$('sideToggle').onclick = function () { $('side').classList.toggle('open'); };
-if (window.innerWidth <= 960) $('sideToggle').style.display = '';
+/* ---------- 侧栏抽屉（移动端带遮罩，点遮罩关闭） ---------- */
+function toggleSide(open) {
+  $('side').classList.toggle('open', open);
+  $('sideMask').classList.toggle('show', open);
+}
+$('sideToggle').onclick = function () {
+  toggleSide(!$('side').classList.contains('open'));
+};
+$('sideMask').onclick = function () { toggleSide(false); };
 
 /* ---------- 启动 ---------- */
 load();
